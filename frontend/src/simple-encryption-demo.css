@@ -1,0 +1,96 @@
+.simple-encryption { display: grid; grid-template-columns: 280px minmax(0, 1fr); align-items: start; color: var(--app-ink); background: var(--app-canvas); }
+.simple-encryption__controls { min-width: 0; align-self: stretch; padding: 32px 32px 40px; border-right: 1px solid var(--app-line); }
+.simple-encryption__control-title { margin: 0 0 24px; font: 400 28px/1.2 var(--app-display); letter-spacing: -.035em; }
+.simple-encryption__results { min-width: 0; min-height: 430px; padding: 32px; background: var(--app-surface); }
+.simple-encryption__result-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.simple-encryption__result-heading h3 { margin: 0; font: 400 26px/1.2 var(--app-display); letter-spacing: -.025em; }
+.simple-encryption__result-heading > span { color: var(--app-muted); font-size: 12px; line-height: 1.5; text-align: right; }
+.simple-encryption__toolbar { display: flex; align-items: center; gap: 16px; }
+.simple-encryption__modes { display: flex; width: 100%; border: 1px solid var(--app-line-strong); border-radius: var(--radius-sm); padding: 3px; gap: 3px; background: var(--app-panel); }
+.simple-encryption__modes button { flex: 1; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--app-muted); font: inherit; font-size: 12px; font-weight: 600; min-height: 44px; padding: 8px 7px; cursor: pointer; }
+.simple-encryption__modes button[aria-pressed="true"] { background: var(--app-surface); color: var(--app-green); border-color: var(--app-line-strong); }
+.simple-encryption__modes button:hover { color: var(--app-ink); background: var(--app-panel); }
+.simple-encryption__modes button:active { background: var(--app-green-soft); }
+.simple-encryption button:focus-visible, .simple-encryption summary:focus-visible { outline: 2px solid var(--app-green); outline-offset: 3px; }
+.simple-encryption__intro { margin: 20px 0 28px; color: var(--app-muted); font-size: 14px; line-height: 1.7; }
+.simple-encryption__form label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.simple-encryption__input-row { display: flex; flex-direction: column; gap: 12px; }
+.simple-encryption__input-row input { width: 100%; min-width: 0; min-height: 64px; border: 1px solid var(--app-line-strong); border-radius: var(--radius-sm); color: var(--app-ink); background: var(--app-surface); font: 400 28px/1.3 var(--app-display); padding: 12px 16px; }
+.simple-encryption__input-row input:focus { outline: 2px solid var(--app-green); outline-offset: 2px; }
+.simple-encryption__input-row input[aria-invalid="true"] { border-color: var(--app-red); }
+.simple-encryption__run { display: inline-flex; width: 100%; justify-content: center; align-items: center; gap: 8px; min-height: 48px; border: 1px solid var(--app-green); border-radius: var(--radius-sm); background: var(--app-green); color: var(--app-surface); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.simple-encryption__run:hover:not(:disabled) { background: var(--app-brand-deep); }
+.simple-encryption__run:active:not(:disabled) { transform: translateY(1px); }
+.simple-encryption__run:disabled { opacity: .55; cursor: not-allowed; }
+.simple-encryption__feedback { min-height: 42px; margin: 16px 0 0; color: var(--app-muted); font-size: 13px; line-height: 1.6; }
+.simple-encryption__feedback--error { color: var(--app-red); }
+.simple-encryption__flow { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-block: 1px solid var(--app-line-strong); }
+.simple-encryption__step { min-width: 0; min-height: 230px; padding: 22px 20px; background: var(--app-surface); display: flex; flex-direction: column; }
+.simple-encryption__step--cipher { background: var(--app-brand-deep); color: var(--app-surface); }
+.simple-encryption__step-label { display: flex; align-items: baseline; gap: 10px; color: var(--app-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.simple-encryption__step-label > span { color: var(--app-ink); font-size: 14px; font-weight: 600; }
+.simple-encryption__plain { margin: 24px 0; font: 400 clamp(28px, 3vw, 42px)/1.2 var(--app-display); letter-spacing: -.035em; overflow-wrap: anywhere; white-space: pre-wrap; max-height: 144px; overflow-y: auto; }
+.simple-encryption__cipher { display: block; margin: 28px 0 24px; color: inherit; font: 500 16px/1.6 ui-monospace, monospace; overflow-wrap: anywhere; max-height: 144px; overflow-y: auto; }
+.simple-encryption__caption { display: block; margin-top: auto; color: var(--app-muted); font-size: 13px; line-height: 1.5; }
+.simple-encryption__step--cipher .simple-encryption__step-label, .simple-encryption__step--cipher .simple-encryption__step-label > span, .simple-encryption__step--cipher .simple-encryption__caption { color: var(--app-surface); }
+.simple-encryption__arrow { position: absolute; top: 50%; z-index: 1; padding: 5px; width: 30px; height: 30px; background: var(--app-surface); border: 1px solid var(--app-line-strong); border-radius: 50%; color: var(--app-green); transform: translate(-50%, -50%); }
+.simple-encryption__arrow:nth-of-type(1) { left: calc(100% / 3); }
+.simple-encryption__arrow:nth-of-type(2) { left: calc(200% / 3); }
+.simple-encryption__key { display: flex; align-items: flex-start; gap: 12px; padding: 24px 20px; margin: 24px 0 8px; border-left: 3px solid var(--app-green); background: var(--app-canvas); }
+.simple-encryption__key > svg { color: var(--app-green); flex-shrink: 0; margin-top: 2px; }
+.simple-encryption__key > div { flex: 1; min-width: 0; }
+.simple-encryption__key strong { display: block; font-size: 14px; font-weight: 600; }
+.simple-encryption__key code { display: block; overflow-wrap: anywhere; margin: 8px 0; font: 14px/1.6 ui-monospace, monospace; color: var(--app-green); }
+.simple-encryption__key span { display: block; color: var(--app-muted); font-size: 13px; }
+.simple-encryption__details { margin-top: 16px; border-top: 1px solid var(--app-line); }
+.simple-encryption__details summary { padding: 16px 0; color: var(--app-green); font-size: 14px; font-weight: 600; cursor: pointer; }
+.simple-encryption__details summary:hover { color: var(--app-ink); }
+.simple-encryption__details summary:active { color: var(--app-brand-deep); }
+.simple-encryption__details p { color: var(--app-ink); font-size: 14px; line-height: 1.7; margin: 0 0 16px; }
+.simple-encryption__details dl { margin: 0; }
+.simple-encryption__value { padding: 11px 0; border-top: 1px solid var(--app-line); }
+.simple-encryption__value dt { color: var(--app-muted); font-size: 13px; margin-bottom: 6px; }
+.simple-encryption__value dd { margin: 0; }
+.simple-encryption__value code { display: block; overflow-wrap: anywhere; white-space: pre-wrap; font: 13px/1.7 ui-monospace, monospace; }
+.simple-encryption__details pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.7 ui-monospace, monospace; padding: 16px; background: var(--app-canvas); border-radius: var(--radius-sm); }
+.simple-encryption__details h4 { font-size: 14px; margin: 24px 0 8px; }
+.simple-encryption__backend { min-height: 48px; padding: 24px 0 8px; font-size: 14px; line-height: 1.6; color: var(--app-ink); }
+.simple-encryption__backend > span { display: flex; align-items: center; gap: 6px; }
+.simple-encryption__backend .simple-encryption__observed { color: var(--app-green); }
+.simple-encryption__backend small { display: block; margin-top: 8px; font-size: 13px; color: var(--app-muted); }
+@media (max-width: 1080px) {
+  .simple-encryption { grid-template-columns: 250px minmax(0, 1fr); }
+  .simple-encryption__controls, .simple-encryption__results { padding: 28px 24px; }
+  .simple-encryption__step { padding: 20px 16px; }
+}
+@media (max-width: 900px) {
+  .simple-encryption { grid-template-columns: 1fr; }
+  .simple-encryption__controls { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; border-right: 0; border-bottom: 1px solid var(--app-line); }
+  .simple-encryption__control-title { grid-column: 1; margin-bottom: 18px; }
+  .simple-encryption__toolbar { grid-column: 1; }
+  .simple-encryption__intro { grid-column: 1; margin: 16px 0 0; }
+  .simple-encryption__form { grid-column: 2; grid-row: 1 / 4; }
+  .simple-encryption__results { min-height: 0; }
+}
+@media (max-width: 620px) {
+  .simple-encryption__controls { display: block; padding: 24px 20px; }
+  .simple-encryption__results { padding: 24px 20px; }
+  .simple-encryption__control-title { margin-bottom: 20px; }
+  .simple-encryption__result-heading { align-items: flex-start; margin-bottom: 20px; gap: 12px; }
+  .simple-encryption__result-heading h3 { font-size: 23px; }
+  .simple-encryption__result-heading > span { max-width: 100px; }
+  .simple-encryption__toolbar { align-items: flex-start; flex-direction: column; gap: 9px; }
+  .simple-encryption__modes { width: 100%; }
+  .simple-encryption__modes button { flex: 1; padding-inline: 10px; }
+  .simple-encryption__intro { font-size: 14px; margin: 16px 0 24px; }
+  .simple-encryption__input-row { flex-direction: column; }
+  .simple-encryption__run { min-height: 48px; }
+  .simple-encryption__feedback { min-height: 21px; }
+  .simple-encryption__flow { grid-template-columns: 1fr; }
+  .simple-encryption__step { min-height: 176px; padding: 20px; }
+  .simple-encryption__plain, .simple-encryption__cipher { margin: 16px 0; }
+  .simple-encryption__arrow { position: relative; justify-self: end; margin: -15px 20px -15px 0; top: auto; transform: rotate(90deg); }
+  .simple-encryption__arrow:nth-of-type(1), .simple-encryption__arrow:nth-of-type(2) { left: auto; }
+  .simple-encryption__key { padding: 20px 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .simple-encryption__run:active:not(:disabled) { transform: none; } }

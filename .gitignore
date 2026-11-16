@@ -1,0 +1,16 @@
+.DS_Store
+.env
+.env.lan
+.env.lan.tmp.*
+*.log
+.coverage
+.pytest_cache/
+__pycache__/
+*.py[cod]
+backend/.venv/
+backend/data/
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+playwright-report/
+test-results/

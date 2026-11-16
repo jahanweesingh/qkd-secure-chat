@@ -1,0 +1,33 @@
+/* Composer and room refinements; media cryptography lives outside presentation. */
+.file-picker { display: none; }
+.attach-button { display: grid; place-items: center; width: 42px; height: 44px; flex: 0 0 42px; padding: 0; border: 0; border-radius: 10px; color: var(--app-muted); background: transparent; cursor: pointer; }
+.attach-button:hover:not(:disabled) { color: var(--app-green); background: var(--app-green-soft); }
+.attach-button:disabled { opacity: .45; cursor: not-allowed; }
+.file-review { display: flex; align-items: center; gap: 14px; max-width: 880px; margin: 0 auto 12px; padding: 12px; border: 1px solid var(--app-line-strong); border-radius: 14px; background: var(--app-surface); }
+.file-review > img, .file-review > video { width: 88px; height: 76px; object-fit: contain; flex: 0 0 88px; border-radius: 8px; background: var(--app-canvas); }
+.file-review__info { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.file-review__info strong { font-size: 13px; overflow-wrap: anywhere; }
+.file-review__info span { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--app-muted); line-height: 1.6; }
+.file-review__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.file-review button { min-height: 38px; padding: 8px 12px; color: var(--app-green); border: 1px solid var(--app-line-strong); border-radius: 8px; background: var(--app-surface); cursor: pointer; font-size: 12px; font-weight: 600; }
+.file-review button:last-child { color: white; background: var(--app-green); border-color: var(--app-green); }
+.file-review button:hover:not(:disabled) { filter: brightness(.94); }
+.file-review button:disabled { opacity: .5; cursor: not-allowed; }
+.composer-shell > .file-error { display: block; max-width: 880px; margin: 8px auto; color: var(--app-red); font-size: 12px; text-align: left; }
+.message-bubble--media { min-width: min(300px, 65vw); }
+.chat-app .message-row--mine .message-bubble--media { color: var(--app-ink); background: var(--app-green-soft); border-color: var(--app-line-strong); }
+.chat-sidebar .phase-card { padding: 13px 15px; }
+.chat-sidebar .phase-card p { display: none; }
+.chat-sidebar .phase-card__top { font-size: 9px; }
+.chat-sidebar .phase-card > strong { font-size: 12px; }
+.chat-sidebar .sidebar-lab { min-height: 66px; }
+@media (max-width: 620px) {
+  .file-review { flex-wrap: wrap; gap: 10px; }
+  .file-review__actions { width: 100%; justify-content: flex-end; }
+  .file-review > img, .file-review > video { width: 64px; height: 58px; flex-basis: 64px; }
+  .composer-shell > p .media-limit { display: inline; font-size: 9px; }
+  .message-bubble--media { min-width: 0; width: min(270px, 70vw); }
+  .attach-button { width: 36px; flex-basis: 36px; }
+}
+
+.chat-app .message-row--mine .attachment-message :focus-visible { outline-color: var(--app-green); }

@@ -1,0 +1,17 @@
+.attachment-message { width: min(380px, 100%); min-width: min(260px, 100%); color: inherit; }
+.attachment-message__heading { display: flex; align-items: center; gap: 10px; }
+.attachment-message__heading > div { flex: 1; min-width: 0; }
+.attachment-message__heading strong { display: block; overflow-wrap: anywhere; font-size: 14px; line-height: 1.5; font-weight: 600; }
+.attachment-message__heading small { display: block; margin-top: 3px; font-size: 12px; line-height: 1.5; opacity: .85; }
+.attachment-message__heading > svg { flex-shrink: 0; }
+.attachment-message__icon { display: grid; place-items: center; width: 42px; height: 46px; flex-shrink: 0; border: 1px solid currentColor; border-radius: 10px; }
+.attachment-message__media { display: block; max-width: 100%; width: 100%; max-height: 340px; object-fit: contain; margin: 14px 0; background: #11251d; border-radius: 10px; }
+.attachment-message__actions { display: flex; align-items: flex-start; flex-direction: column; gap: 8px; margin-top: 14px; }
+.attachment-message__actions button, .attachment-message__actions a { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; padding: 8px 12px; border: 1px solid currentColor; border-radius: 8px; color: inherit; background: transparent; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none; }
+.attachment-message__actions button:hover:not(:disabled), .attachment-message__actions a:hover { background: rgb(127 127 127 / 15%); }
+.attachment-message__actions button:disabled { opacity: .75; cursor: wait; }
+.attachment-message__actions small { font-size: 11px; opacity: .85; }
+.attachment-message__error { display: flex; align-items: flex-start; gap: 7px; font-size: 12px !important; line-height: 1.6 !important; margin: 12px 0 !important; }
+.attachment-message__error svg, .attachment-invalid svg { flex-shrink: 0; margin-top: 2px; }
+.attachment-invalid { display: inline-flex; align-items: flex-start; gap: 8px; font-size: 13px; }
+.message-row--mine .attachment-message :focus-visible { outline-color: white; }

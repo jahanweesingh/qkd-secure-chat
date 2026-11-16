@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: bb84-secure-chat
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./deploy/Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: DEPLOYMENT_MODE
+        value: hosted
+      - key: DATABASE_PATH
+        value: /app/data/chat.db

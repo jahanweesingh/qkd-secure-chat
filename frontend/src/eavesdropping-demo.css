@@ -1,0 +1,46 @@
+.eve-demo { margin: 24px 0; padding: 22px; border: 1px solid var(--app-line); border-radius: var(--radius-md); background: var(--app-surface); color: var(--app-ink); }
+.eve-demo__heading, .eve-demo__case-title, .eve-demo__row-heading, .eve-demo__row-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.eve-demo h3, .eve-demo h4 { margin: 0; }
+.eve-demo h3 { font-family: var(--app-display); font-size: 23px; letter-spacing: -.035em; }
+.eve-demo h4 { font-size: 14px; }
+.eve-demo p, .eve-demo small { color: var(--app-muted); font-size: 12px; line-height: 1.7; }
+.eve-demo__tag { font-size: 11px; color: var(--app-green); white-space: nowrap; }
+.eve-demo__comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0 12px; }
+.eve-demo__case { padding: 18px; border: 1px solid var(--app-line); border-radius: var(--radius-sm); background: var(--app-canvas); display: flex; flex-direction: column; }
+.eve-demo__case-title { justify-content: start; flex-wrap: wrap; color: var(--app-green); }
+.eve-demo__case-title span { color: var(--app-muted); margin-left: auto; font-size: 11px; }
+.eve-demo__reading { display: flex; flex-direction: column; gap: 4px; margin-top: 20px; }
+.eve-demo__reading strong { font-size: clamp(32px, 4vw, 46px); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.05em; }
+.eve-demo__reading span, .eve-demo__row-heading > span, .eve-demo__row-controls > span { color: var(--app-muted); font-size: 11px; }
+.eve-demo p.eve-demo__outcome { color: var(--app-green); font-weight: 650; margin-bottom: 0; }
+.eve-demo__case--stopped p.eve-demo__outcome { color: var(--app-red); }
+.eve-demo__case small { display: block; margin-bottom: 10px; }
+.eve-demo button { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 14px; border: 1px solid var(--app-line-strong); border-radius: var(--radius-sm); background: var(--app-surface); color: var(--app-green); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.eve-demo__case > button { margin-top: auto; }
+.eve-demo button:hover:not(:disabled) { border-color: var(--app-green); background: var(--app-green-soft); }
+.eve-demo button:active:not(:disabled) { background: var(--app-panel); }
+.eve-demo button:focus-visible { outline: 2px solid var(--app-green); outline-offset: 3px; }
+.eve-demo button:disabled { cursor: not-allowed; opacity: .5; }
+.eve-demo__transmission { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--app-line); }
+.eve-demo__path { display: grid; grid-template-columns: repeat(3, 1fr); list-style: none; padding: 0; margin: 22px 0 16px; }
+.eve-demo__path li { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 0 18px; color: var(--app-green); }
+.eve-demo__path li:not(:last-child)::after { content: '→'; position: absolute; right: -6px; top: 30%; color: var(--app-muted); }
+.eve-demo__path strong { color: var(--app-ink); font-size: 13px; }
+.eve-demo__path span { font-size: 12px; line-height: 1.5; color: var(--app-muted); }
+.eve-demo__path span.eve-demo__basis { font-family: ui-monospace, monospace; font-size: 27px; color: var(--app-ink); }
+.eve-demo__path .eve-demo__intercepted { color: var(--app-amber); }
+.eve-demo p.eve-demo__sample { color: var(--app-green); padding: 12px; background: var(--app-green-soft); border-radius: var(--radius-sm); }
+.eve-demo p.eve-demo__sample--mismatch { color: var(--app-red); background: var(--app-canvas); border: 1px solid var(--app-red); }
+.eve-demo__transmission > small { display: block; margin-top: 12px; }
+.eve-demo__boundary { font-size: 12px; line-height: 1.7; color: var(--app-muted); margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--app-line); }
+.eve-demo__boundary strong { color: var(--app-ink); }
+.eve-demo__waiting { padding: 10px 0; }
+@media (max-width: 620px) {
+  .eve-demo { padding: 16px; }
+  .eve-demo__heading { align-items: start; flex-direction: column; }
+  .eve-demo__comparison { grid-template-columns: 1fr; }
+  .eve-demo__path li { padding: 0 7px; }
+  .eve-demo__path span, .eve-demo__path strong { font-size: 11px; }
+  .eve-demo__row-heading { align-items: start; flex-direction: column; gap: 6px; }
+  .eve-demo__row-controls { flex-wrap: wrap; }
+}
