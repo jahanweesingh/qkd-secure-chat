@@ -57,7 +57,9 @@ import type {
   Bb84RunState,
 } from './bb84';
 import { useChat } from './hooks/useChat';
-import { ChatProtectionSummary, LabParticipants, SecurityLabWalkthrough } from './SecurityLabWalkthrough';
+import type { EndpointBb84Progress } from './bb84ChatSession';
+import { EndpointBb84RuntimeSummary, LabParticipants, SecurityLabWalkthrough } from './SecurityLabWalkthrough';
+import { getEndpointBb84RuntimeStatus } from './bb84RuntimeStatus';
 import { PresentationDialog } from './PresentationDialog';
 import { CafeWelcome } from './CafeWelcome';
 import { EavesdroppingDemo } from './EavesdroppingDemo';
@@ -453,7 +455,7 @@ function Onboarding({ onJoin }: OnboardingProps) {
             <ShieldCheck size={19} aria-hidden="true" />
             <div>
               <strong>Encryption starts inside the room</strong>
-              <p>Sending stays paused until both browsers exchange public keys. The BB84 lab remains an independent educational simulation.</p>
+              <p>Sending stays paused until both browsers exchange public keys. The room-hosted BB84 teaching run is separate; endpoint-owned BB84 can contribute to chat keys after confirmation.</p>
             </div>
           </aside>
         </div>
@@ -529,9 +531,10 @@ function EncryptionBadge({ encryption, onOpen }: EncryptionBadgeProps) {
   );
 }
 
-interface SecurityPanelProps {
+export interface SecurityPanelProps {
   open: boolean;
   encryption: EncryptionInfo;
+  endpointBb84: EndpointBb84Progress;
   onClose: () => void;
   onVerify: () => void;
   onClearVerification: () => void;
@@ -539,9 +542,10 @@ interface SecurityPanelProps {
   onRetry: () => void;
 }
 
-function SecurityPanel({
+export function SecurityPanel({
   open,
   encryption,
+  endpointBb84,
   onClose,
   onVerify,
   onClearVerification,
@@ -554,6 +558,8 @@ function SecurityPanel({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const content = encryptionCopy(encryption);
   const Icon = content.icon;
+  const runtimeStatus = getEndpointBb84RuntimeStatus(encryption, endpointBb84);
+  const hybridActive = runtimeStatus.chatMode === 'BB84-ECDH hybrid active';
 
   useEffect(() => {
     if (!open) return undefined;
@@ -630,14 +636,25 @@ function SecurityPanel({
           </button>
         </header>
 
-        <div className={`security-status security-status--${encryption.state}`} role="status">
-          <Icon
-            size={19}
-            aria-hidden="true"
-            className={['idle', 'setting_up'].includes(encryption.state) ? 'spin' : ''}
-          />
-          <div><strong>{content.label}</strong><p>{content.detail}</p></div>
-        </div>
+        <section className={`security-overview security-overview--${encryption.state}`} role="status" aria-label="Current chat security">
+          <div className="security-overview__connection">
+            <Icon
+              size={19}
+              aria-hidden="true"
+              className={['idle', 'setting_up'].includes(encryption.state) ? 'spin' : ''}
+            />
+            <div><strong>{content.label}</strong><p>{content.detail}</p></div>
+          </div>
+          <div className="security-overview__mode">
+            <span>Active message encryption</span>
+            <strong>{runtimeStatus.chatMode === 'BB84-ECDH hybrid active' ? 'BB84 + ECDH Hybrid' : runtimeStatus.chatMode === 'ECDH-only' ? 'ECDH-only' : 'Not ready'}</strong>
+          </div>
+          <div className="security-overview__indicators">
+            <span>BB84 contribution <b>{runtimeStatus.contribution === 'Confirmed' && runtimeStatus.contributionInChat !== 'Active in hybrid epoch' ? 'Confirmed · inactive' : runtimeStatus.contribution}</b></span>
+            <span>Key confirmation <b>{runtimeStatus.keyConfirmation}</b></span>
+            <span>Message cipher <b>AES-256-GCM</b></span>
+          </div>
+        </section>
 
         {encryption.error && encryption.state !== 'failed' && (
           <p className="security-warning"><AlertCircle size={16} />{encryption.error}</p>
@@ -707,8 +724,12 @@ function SecurityPanel({
           <summary><Info size={16} /> Technical details</summary>
           <section className="encryption-flow" aria-labelledby="encryption-flow-title">
           <div className="security-section-heading">
-            <div><h3 id="encryption-flow-title">How message protection works</h3></div>
+            <div><h3 id="encryption-flow-title">Key and message details</h3></div>
           </div>
+          <EndpointBb84RuntimeSummary encryption={encryption} endpointBb84={endpointBb84} />
+          <p className="technical-details__flow"><strong>Key derivation:</strong> {hybridActive
+            ? 'ECDH shared secret + confirmed BB84 contribution → HKDF-SHA-256 → separate directional AES-256-GCM keys.'
+            : 'ECDH shared secret → HKDF-SHA-256 → separate directional AES-256-GCM keys.'}</p>
           <ol>
             <li className={encryption.localKeyId ? 'is-complete' : ''}>
               <span><KeyRound size={17} /></span>
@@ -717,12 +738,21 @@ function SecurityPanel({
             </li>
             <li className={sessionReady ? 'is-complete' : ''}>
               <span><Fingerprint size={17} /></span>
-              <div><strong>Paired with your partner</strong><p>ECDH combines your private key with the partner's public key.</p></div>
-              <small>{sessionReady ? 'Derived' : 'Pending'}</small>
+              <div><strong>Paired with your partner</strong><p>ECDH combines this browser’s private key with the partner’s public key to establish a shared secret.</p></div>
+              <small>{sessionReady ? 'Established' : 'Pending'}</small>
             </li>
+            {hybridActive && <>
+              <li className="is-complete">
+                <span><KeyRound size={17} /></span>
+                <div><strong>BB84 contribution</strong><p>Both browsers simulate the exchange independently; matching material contributes after reconciliation, privacy amplification and mutual confirmation.</p></div>
+                <small>Used in hybrid mode</small>
+              </li>
+            </>}
             <li className={sessionReady ? 'is-complete' : ''}>
               <span><KeyRound size={17} /></span>
-              <div><strong>Separated by direction</strong><p>HKDF-SHA-256 creates different keys for sending and receiving.</p></div>
+              <div><strong>Separated by direction</strong><p>{hybridActive
+                ? 'HKDF-SHA-256 combines the ECDH shared secret and confirmed BB84 contribution to derive separate sending and receiving keys.'
+                : 'HKDF-SHA-256 derives separate sending and receiving keys from the ECDH shared secret.'}</p></div>
               <small>{sessionReady ? 'Derived' : 'Pending'}</small>
             </li>
             <li className={sessionReady ? 'is-complete' : ''}>
@@ -1251,7 +1281,7 @@ function PostProcessingPanel({ result }: { result: Bb84Result }) {
         <div>
           <strong>{outcome.title}</strong>
           <p>{outcome.detail}</p>
-          <span className="post-processing__chat-state"><b>Chat encryption: Independent</b> · This simulation never supplies or changes the live chat keys.</span>
+          <span className="post-processing__chat-state"><b>Room-hosted report: Independent teaching simulation</b> · It does not set chat keys; endpoint-owned BB84 may establish the active hybrid epoch after confirmation.</span>
         </div>
       </aside>
 
@@ -1302,7 +1332,7 @@ function PostProcessingPanel({ result }: { result: Bb84Result }) {
         <KeyRound size={18} aria-hidden="true" />
         <div>
           <strong>Temporary material is not directly serialized or retained</strong>
-          <p>Serialized to clients: <b>{processing.keyMaterialExposed ? 'Yes' : 'No'}</b> · Used for chat: <b>{processing.keyUsedForChat ? 'Yes' : 'No'}</b> · Retained by processor: <b>{processing.derivation.materialRetained ? 'Yes' : 'No'}</b></p>
+          <p>Serialized to clients: <b>{processing.keyMaterialExposed ? 'Yes' : 'No'}</b> · This room-hosted report does not set chat keys; the separate endpoint-owned browser exchange can establish a hybrid chat epoch after confirmation. · Retained by processor: <b>{processing.derivation.materialRetained ? 'Yes' : 'No'}</b></p>
           <span>HKDF may expand a 128-bit-sized intermediate value to 256 bits, but it cannot create entropy or raise its modeled strength above 128 bits.</span>
           <span>{processing.reproducibleTeachingRun
             ? 'This seeded teaching run is predictable: its internal values can be reconstructed from the shared seed, settings, room and session context. It provides no secrecy or cryptographic randomness.'
@@ -1313,15 +1343,15 @@ function PostProcessingPanel({ result }: { result: Bb84Result }) {
       <aside className="encryption-roadmap" aria-label="Live message encryption">
         <span>Live chat</span>
         <div>
-          <strong>Chat key setup is independent</strong>
-          <p>When browser key setup succeeds, ECDH and AES-256-GCM protect messages. Check the live chat encryption status above. The BB84 result cannot activate it.</p>
+          <strong>This room-hosted report does not set the chat key</strong>
+          <p>The room-hosted teaching simulation's output is discarded. The endpoint-owned browser exchange may establish the active hybrid chat key after confirmation; its live status is shown above and in Security Details.</p>
         </div>
       </aside>
     </section>
   );
 }
 
-interface ProtocolLabProps {
+export interface ProtocolLabProps {
   open: boolean;
   encryption: EncryptionInfo;
   connection: ConnectionInfo;
@@ -1332,10 +1362,39 @@ interface ProtocolLabProps {
   error: string | null;
   returnFocusRef: RefObject<HTMLButtonElement>;
   onRun: (config: Bb84Config) => boolean;
+  endpointBb84: EndpointBb84Progress;
+  onStartEndpointBb84: (config: Bb84Config) => boolean;
+  onUseEcdhFallback: () => void;
   onClose: () => void;
 }
 
-function ProtocolLab({
+const endpointBb84Steps = [
+  'State Preparation',
+  'Measurement',
+  'Basis Reconciliation',
+  'QBER Analysis',
+  'Error Correction',
+  'Privacy Amplification',
+  'Key Confirmation',
+] as const;
+
+const endpointBb84StageByStatus: Partial<Record<EndpointBb84Progress['status'], number>> = {
+  preparing: 0,
+  exchanging: 1,
+  sifting: 2,
+  sampling: 3,
+  reconciling: 4,
+  privacy_amplification: 5,
+  key_confirmation: 6,
+};
+
+function endpointBb84StepState(status: EndpointBb84Progress['status'], index: number): 'complete' | 'current' | 'upcoming' {
+  if (status === 'complete' || ((endpointBb84StageByStatus[status] ?? -1) > index)) return 'complete';
+  if (endpointBb84StageByStatus[status] === index) return 'current';
+  return 'upcoming';
+}
+
+export function ProtocolLab({
   open,
   encryption,
   connection,
@@ -1346,6 +1405,9 @@ function ProtocolLab({
   error,
   returnFocusRef,
   onRun,
+  endpointBb84,
+  onStartEndpointBb84,
+  onUseEcdhFallback,
   onClose,
 }: ProtocolLabProps) {
   const [config, setConfig] = useState<Bb84Config>({
@@ -1407,6 +1469,7 @@ function ProtocolLab({
   };
   const running = state === 'running';
   const connected = connection.state === 'connected';
+  const endpointRuntime = getEndpointBb84RuntimeStatus(encryption, endpointBb84);
   const decisionCopy = result ? bb84DecisionCopy(result) : null;
   const qberPercentage = result?.metrics.qber === null || result?.metrics.qber === undefined
     ? null
@@ -1437,7 +1500,7 @@ function ProtocolLab({
         <header className="protocol-lab__header">
           <span className="protocol-lab__mark" aria-hidden="true"><Atom size={23} /></span>
           <div>
-            <span className="eyebrow">Shared room experiment</span>
+            <span className="eyebrow">Chat key setup and teaching lab</span>
             <h2 id="protocol-lab-title">BB84 Security Lab</h2>
           </div>
           <button ref={closeButtonRef} className="icon-button" type="button" aria-label="Close protocol lab" onClick={onClose}>
@@ -1446,25 +1509,76 @@ function ProtocolLab({
         </header>
 
         <div className="protocol-lab__body">
-          <p className="lab-introduction">See how two people can create a shared secret key and check whether someone may have interfered with the exchange.</p>
+          <p className="lab-introduction">Establish a chat key in both browsers. Explore the separate room simulation only if you want to inspect the teaching model.</p>
           <LabParticipants />
-          <aside id="protocol-lab-boundary" className="lab-boundary" role="note">
-            <ShieldAlert size={20} aria-hidden="true" />
-            <div>
-              <span className="lab-security-marker">Simulation only · separate from message encryption</span>
-              <strong>A software experiment, separate from your chat</strong>
-              <p>The room host simulates Alice, Bob and Eve. It shows only a summary and discards the temporary key material. Your chat uses separate browser encryption. This is not physical quantum key distribution.</p>
-            </div>
+          <aside id="protocol-lab-boundary" className="lab-boundary lab-boundary--compact" role="note">
+            <ShieldAlert size={18} aria-hidden="true" />
+            <p><strong>Software simulation only.</strong> BB84 is simulated in the two browsers; this is not physical quantum key distribution.</p>
           </aside>
 
-          <ChatProtectionSummary encryption={encryption} connection={connection} state={state} result={result} />
+          <section className="lab-endpoint-bb84" aria-labelledby="endpoint-bb84-heading">
+            <div className="lab-section-heading">
+              <span><KeyRound size={17} /> Browser-to-browser key setup</span>
+              <small className={`lab-mode-pill ${endpointRuntime.chatMode === 'BB84-ECDH hybrid active' ? 'lab-mode-pill--hybrid' : ''}`}>{endpointRuntime.chatMode === 'BB84-ECDH hybrid active' ? 'Hybrid key active' : 'ECDH-only chat active'}</small>
+            </div>
+            <p id="endpoint-bb84-heading">Alice and Bob each run BB84 in their browser. The chat switches to the hybrid key only after both confirm it.</p>
+            <ol className="lab-protocol-steps" aria-label="Endpoint BB84 establishment steps">
+              {endpointBb84Steps.map((step, index) => {
+                const stepState = endpointBb84StepState(endpointBb84.status, index);
+                return <li className={`lab-protocol-steps__${stepState}`} aria-current={stepState === 'current' ? 'step' : undefined} key={step}>
+                  <span aria-hidden="true">{stepState === 'complete' ? <Check size={14} /> : index + 1}</span>
+                  <strong>{step}</strong>
+                </li>;
+              })}
+            </ol>
+            <div className="lab-endpoint-progress">
+              <label htmlFor="endpoint-bb84-progress">Key establishment progress <strong>{endpointBb84.status === 'complete' ? 100 : endpointBb84.status === 'failed' ? 0 : endpointBb84.percent}%</strong></label>
+              <progress id="endpoint-bb84-progress" max={100} value={endpointBb84.status === 'complete' ? 100 : endpointBb84.status === 'failed' ? 0 : endpointBb84.percent} />
+            </div>
+            <div className="lab-qber-card" aria-label="BB84 sample error rate">
+              <span>Sample error rate (QBER)</span>
+              <strong>{endpointBb84.qberPpm === null ? 'Waiting for sample' : `${(endpointBb84.qberPpm / 10_000).toFixed(2)}%`}</strong>
+              <small>{endpointBb84.status === 'complete' ? 'Measured by the endpoint exchange' : endpointBb84.status === 'failed' ? 'Last exchange stopped' : 'Shown after the shared sample is checked'}</small>
+            </div>
+            <button
+              className="lab-run-button"
+              type="button"
+              disabled={!connected || !encryption.canSend || ['preparing', 'exchanging', 'sifting', 'sampling', 'reconciling', 'privacy_amplification', 'key_confirmation'].includes(endpointBb84.status)}
+              onClick={() => onStartEndpointBb84(config)}
+            >
+              {['preparing', 'exchanging', 'sifting', 'sampling', 'reconciling', 'privacy_amplification', 'key_confirmation'].includes(endpointBb84.status)
+                ? <><LoaderCircle className="spin" size={18} /> Exchange in progress</>
+                : <><Play size={18} fill="currentColor" /> {endpointBb84.status === 'complete' ? 'Run BB84 again' : 'Start BB84 key exchange'}</>}
+            </button>
+            <div className={`lab-final-result lab-final-result--${endpointBb84.status}`} role={endpointBb84.status === 'failed' ? 'alert' : 'status'}>
+              <strong>{endpointBb84.status === 'complete'
+                ? endpointRuntime.chatMode === 'BB84-ECDH hybrid active' ? 'Hybrid chat key active' : 'BB84 completed · ECDH fallback active'
+                : endpointBb84.status === 'failed' ? 'BB84 exchange failed'
+                  : endpointRuntime.session === 'In progress' ? 'Establishing the hybrid chat key' : 'Ready to establish a hybrid chat key'}</strong>
+              <p>{endpointBb84.status === 'complete'
+                ? endpointRuntime.chatMode === 'BB84-ECDH hybrid active' ? 'Both browsers confirmed the contribution. New messages use the hybrid key.' : 'The BB84 contribution is confirmed but inactive. New messages use ECDH-only encryption.'
+                : endpointBb84.status === 'failed' ? encryption.activeKeyMode === 'ecdh' ? 'The exchange stopped; ECDH-only chat remains active.' : 'The exchange stopped and no hybrid key was activated.'
+                  : endpointRuntime.session === 'In progress' ? 'ECDH-only remains active until both browsers finish and confirm the exchange.' : 'Start the browser-to-browser exchange when both people are ready.'}</p>
+              {endpointBb84.error && <small>{endpointBb84.error}</small>}
+              {encryption.activeKeyMode === 'bb84_hybrid' && <button type="button" className="lab-run-button" onClick={onUseEcdhFallback}>Switch chat back to ECDH</button>}
+            </div>
+            <details className="lab-disclosure lab-endpoint-details">
+              <summary>Detailed endpoint protocol status</summary>
+              <EndpointBb84RuntimeSummary encryption={encryption} endpointBb84={endpointBb84} />
+            </details>
+          </section>
 
-          <EavesdroppingDemo result={result} state={state} connected={connected} onRun={preset => {
-            if (!onRun(preset)) return false;
-            setConfig(preset);
-            return true;
-          }} />
-
+          <details className="lab-disclosure lab-room-teaching">
+            <summary>Room-hosted teaching simulation · advanced</summary>
+            <p className="lab-room-teaching__note">This separate room simulation demonstrates the BB84 steps for learning. Its output never contributes to chat encryption. Both approaches here are software simulations, not quantum hardware.</p>
+            <details className="lab-disclosure lab-room-demo">
+              <summary>Eavesdropper comparison</summary>
+              <EavesdroppingDemo result={result} state={state} connected={connected} onRun={preset => {
+                if (!onRun(preset)) return false;
+                setConfig(preset);
+                return true;
+              }} />
+            </details>
           <div className="protocol-lab__workspace">
             <form
               className="lab-settings"
@@ -1613,9 +1727,17 @@ function ProtocolLab({
 
               {!running && result && decisionCopy && (
                 <div className="lab-result-content">
-                  <SecurityLabWalkthrough key={result.sessionId} result={result} />
-                  <details className="lab-disclosure lab-technical-report">
-                    <summary>Show technical details</summary>
+                  <div className={`lab-final-result lab-final-result--${result.decision.status}`} role="status" aria-label="Room-hosted teaching result">
+                    <strong>{decisionCopy.title}</strong>
+                    <p>{decisionCopy.detail}</p>
+                    <small>Sample error rate (QBER): {qberPercentage === null ? 'Unavailable' : `${qberPercentage.toFixed(2)}%`}</small>
+                    <small>This room-hosted teaching run does not set chat keys.</small>
+                  </div>
+                  <details className="lab-disclosure lab-teaching-walkthrough">
+                    <summary>Explore the teaching run step by step</summary>
+                    <SecurityLabWalkthrough key={result.sessionId} result={result} />
+                    <details className="lab-disclosure lab-technical-report">
+                      <summary>Show technical details</summary>
                   <section className="lab-run-summary" aria-label="Recorded BB84 session settings">
                     <div className="lab-run-summary__heading">
                       <div>
@@ -1708,11 +1830,13 @@ function ProtocolLab({
                     <AlertCircle size={17} aria-hidden="true" />
                     <p><strong>Read the result carefully.</strong> The intercept count and row flags are simulator ground truth, not values Alice and Bob would directly observe. Noise and simulated interception can both raise QBER, so QBER alone does not prove eavesdropping. The trusted-server model exposes no key, discards its temporary material, and never supplies, verifies, or changes the live chat keys. It does not provide a physical security guarantee.</p>
                   </aside>
+                    </details>
                   </details>
                 </div>
               )}
             </section>
           </div>
+          </details>
         </div>
       </section>
     </div>
@@ -1736,6 +1860,7 @@ function ChatView({ session, snapshot, networkStatus, onLeave }: ChatViewProps) 
     bb84Result,
     bb84State,
     bb84Error,
+    endpointBb84,
     securityTrace,
     clearSecurityTrace,
     sendMessage,
@@ -1745,6 +1870,8 @@ function ChatView({ session, snapshot, networkStatus, onLeave }: ChatViewProps) 
     acceptChangedKey,
     retryEncryption,
     runBb84,
+    startEndpointBb84,
+    useEcdhFallback,
     setTyping,
     reconnect,
   } = useChat(session, snapshot);
@@ -2013,6 +2140,7 @@ function ChatView({ session, snapshot, networkStatus, onLeave }: ChatViewProps) 
       <SecurityPanel
         open={securityOpen}
         encryption={encryption}
+        endpointBb84={endpointBb84}
         onClose={closeSecurity}
         onVerify={verifyEncryption}
         onClearVerification={clearEncryptionVerification}
@@ -2207,7 +2335,7 @@ function ChatView({ session, snapshot, networkStatus, onLeave }: ChatViewProps) 
 
       </div>
 
-      <PresentationDialog open={presentationOpen} events={securityTrace} connection={connection} encryption={encryption}
+      <PresentationDialog open={presentationOpen} events={securityTrace} connection={connection} encryption={encryption} endpointBb84={endpointBb84}
         messages={wireMessages} currentClientId={session.clientId} onSend={sendMessage}
         onClear={clearSecurityTrace} onClose={closePresentation} onOpenLab={() => setLabOpen(true)} onOpenSecurity={openSecurity} />
 
@@ -2220,8 +2348,11 @@ function ChatView({ session, snapshot, networkStatus, onLeave }: ChatViewProps) 
         result={bb84Result}
         state={bb84State}
         error={bb84Error}
+        endpointBb84={endpointBb84}
         returnFocusRef={labTriggerRef}
         onRun={runBb84}
+        onStartEndpointBb84={startEndpointBb84}
+        onUseEcdhFallback={useEcdhFallback}
         onClose={closeLab}
       />
     </div>

@@ -10,16 +10,17 @@
 > **Encrypted media update (12 November 2026):** images and videos now use a
 > fresh browser AES-GCM file key, opaque HTTP storage and a key-bearing descriptor
 > protected by the existing chat envelope. See [ENCRYPTED_MEDIA.md](ENCRYPTED_MEDIA.md)
-> for the capability gate, key lifecycle, quotas and limitations. Text key
-> establishment and the independent BB84 simulation remain unchanged.
+> for the capability gate, key lifecycle, quotas and limitations. Text and
+> attachment encryption use the active ECDH-only or confirmed hybrid context.
 
-The November 2026 dashboard upgrade does not change this cryptographic model.
-BB84-assisted derivation remains unimplemented. The feasibility assessment,
-current lifecycle and future endpoint-owned design are in
+The November 2026 endpoint-owned BB84 integration adds an opt-in hybrid mode
+to the existing cryptographic model. The protocol and implemented lifecycle
+are in
 [BB84_AES_INTEGRATION_PLAN.md](BB84_AES_INTEGRATION_PLAN.md). In particular,
-server-known simulated material is not transferred to browsers or mixed into
-chat keys. A successful displayed experiment supplies no additional protection
-to this ECDH-only chat.
+the room-hosted teaching simulator's output is not transferred to browsers or
+mixed into chat keys. Only the independently generated endpoint contribution
+is combined locally with ECDH after both endpoints confirm it. The hybrid
+offers no security independent of ECDH and no genuine quantum security.
 
 ## Implemented boundary
 
@@ -28,7 +29,7 @@ chat. It uses:
 
 - P-256 Elliptic Curve Diffie-Hellman in each browser;
 - HKDF-SHA-256 to derive separate low-key-to-high-key and
-  high-key-to-low-key message keys;
+  high-key-to-low-key message keys in ECDH-only or confirmed hybrid mode;
 - AES-256-GCM with a fresh random 96-bit IV and 128-bit tag for each message;
 - a 12-digit safety code derived locally from both browser public keys and the
   ECDH shared secret;
@@ -39,9 +40,58 @@ chat. It uses:
 - ciphertext-only message persistence on the room backend; and
 - an immutable `e2ee_required` room lock that rejects plaintext chat.
 
-The Phase 3 BB84 and post-processing pipeline remains a separate teaching
-simulation. Its candidate bits, Toeplitz output and HKDF demonstration output
-do not seed, unlock, verify or rekey Phase 4 chat.
+The Phase 3 room-hosted BB84 and post-processing pipeline remains a separate
+teaching simulation. Its candidate bits, Toeplitz output and HKDF demonstration
+output do not seed, unlock, verify or rekey chat. The endpoint-owned BB84 flow
+uses a separate protected relay protocol and only activates after matching
+local contributions and mutual key confirmation.
+
+## Endpoint-owned BB84 hybrid mode: security boundary
+
+The Stage 1 proposal is an optional software simulation, separate from both
+the current backend-owned Protocol Lab and the working ECDH-only chat. Alice's
+and Bob's browsers independently participate: Alice creates fresh preparation
+bits/bases, Bob independently chooses measurement bases and computes simulated
+outcomes, and each endpoint retains and processes its own candidate sequence.
+The classical state representation and protocol disclosures required for
+sifting, sampling, reconciliation, and privacy amplification travel only in
+dedicated AEAD-protected control messages. Those control keys are
+domain-separated from the current ECDH secret. The backend is specified to
+route opaque envelopes only; it must never receive raw candidate bits, the
+reconciled/privacy-amplified contribution, combined KDF input, confirmation
+keys, or final chat keys.
+
+After both endpoints independently obtain the same contribution `C`, the
+implemented key schedule uses a canonical, versioned, length-delimited encoding
+of the existing ECDH secret and `C`. HKDF-SHA-256, with a salt bound to the
+validated run transcript, derives separate directional chat keys and separate
+directional key-confirmation keys. Transcript- and epoch-bound confirmations
+must succeed at both endpoints before a new epoch can be used. The exact
+pre-confirmation transcript cutoff, KDF input/labels, AES-GCM control AAD,
+sequence-derived nonce, message schemas, and bounded educational processing
+parameters are specified in the normative prototype profile in
+[BB84_AES_INTEGRATION_PLAN.md](BB84_AES_INTEGRATION_PLAN.md). They still
+require implementation review and tests.
+
+This design does **not** provide security independent of ECDH. ECDH protects
+the classical simulation channel, so compromise or cryptanalytic failure of
+that exchange defeats the protection assumptions. Software-simulated states
+are classical data; this is not physical QKD, does not model quantum
+no-cloning, and provides no genuine quantum security. It also does not upgrade
+the ECDH-only design to quantum-resistant encryption.
+
+The endpoint state machine rejects stale, replayed, reordered, conflicting,
+or transcript-mismatched packets. Sample rejection, insufficient entropy,
+reconciliation failure, key-confirmation mismatch, or missing contribution
+leaves the new epoch inactive. An endpoint pauses immediately when uncertain
+and sends an authenticated abort if possible; its peer pauses when it receives
+that abort. Any detected connection loss invalidates the run; reconnect cannot
+resume that epoch, and pending BB84-mode messages are discarded. A remote
+browser cannot instantly detect an arbitrary one-way failure, so the design
+does not claim simultaneous fail-stop behavior under arbitrary partitions.
+The current ECDH-only mode remains available through an explicit user choice.
+Existing history must retain its original epoch context, and no failure
+enables plaintext.
 
 ## Deployment shape
 

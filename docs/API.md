@@ -382,6 +382,77 @@ false because no key bytes are serialized in this report; it is not a claim
 that the deterministic seeded run or wider system provides secrecy.
 `key_used_for_chat` is always false.
 
+## Endpoint-owned BB84 control protocol
+
+The `bb84_start` and `bb84_result` events above describe the room-hosted
+teaching simulation only. They do not produce chat keys. `bb84_control` is the
+separate browser-to-browser protocol event used for endpoint-owned hybrid key
+establishment.
+
+Both endpoints must opt in and locally confirm the existing safety code
+before a run. Alice and Bob are assigned by the bytewise ordering of their
+current public keys. Alice's browser independently generates preparation bits
+and bases; Bob's browser independently generates measurement bases and
+simulated outcomes. They exchange the classical simulation data needed for
+sifting and processing only inside a dedicated AEAD-protected control channel
+derived from the existing ECDH secret. The control keys use a separate
+protocol domain and directional labels, distinct from chat keys.
+
+The outer event is a bounded routing envelope:
+
+```json
+{
+  "type": "bb84_control",
+  "version": "bb84-endpoint-v1",
+  "room_id": "room-code",
+  "pair_key_id": "<current public-key-pair ID>",
+  "run_id": "<fresh 128-bit random identifier>",
+  "sender_key_id": "<registered sender public-key ID>",
+  "recipient_key_id": "<registered peer public-key ID>",
+  "sequence": 0,
+  "nonce": "<canonical base64url AEAD nonce>",
+  "ciphertext": "<canonical base64url authenticated ciphertext>"
+}
+```
+
+The backend validates room, pair, active sender/recipient, identifier
+encodings, sequence bounds and packet size, then forward the envelope
+unchanged. It must not decrypt, inspect, or persist inner payloads. The
+complete prototype envelope, associated-data encoding, nonce schedule, inner
+schemas, limits, state transitions, transcript cutoff, KDF, processing
+parameters, and failure behavior are specified in the normative profile in
+[BB84_AES_INTEGRATION_PLAN.md](BB84_AES_INTEGRATION_PLAN.md). That profile is
+the source of truth for the implemented protocol.
+
+The profile uses per-run, per-direction ECDH-derived AES-256-GCM control keys,
+an authenticated length-prefixed outer header, and a 96-bit nonce formed from
+the sender sequence. Frames are capped at 4,096 bytes. The pre-confirmation
+transcript ends at both privacy votes; confirmation and activation records
+extend a separate transcript and never feed back into HKDF. Exact field
+schemas and allowed transitions are normative in the integration plan.
+
+All BB84 bases, simulated outcomes, sample disclosures, parity messages and
+the Toeplitz seed travel inside the protected envelope. Only routing metadata
+and ciphertext cross the backend. The BB84 contribution, combined KDF input,
+confirmation keys and final chat keys never do. Endpoints independently
+perform sifting, sampling, bounded reconciliation, privacy amplification,
+confirmation and activation checks. The specified parameters are educational
+assumptions, not a finite-key proof. The software simulation provides no
+security independent of ECDH and no quantum hardware security.
+
+The implementation tests cover matching endpoint contributions, protected
+control-message replay rejection, transcript agreement, hybrid-key activation
+through the existing AES-GCM message path, and ECDH-only fallback. The broader
+network-partition and cryptographic assurance limits remain described in the
+protocol record; this prototype has not had an independent security audit.
+
+On uncertainty, an endpoint pauses immediately and sends an authenticated
+abort if possible. Its peer pauses upon receipt. Any detected connection loss
+invalidates the run; reconnect cannot resume that epoch, and pending BB84-mode
+messages are discarded. A remote endpoint cannot detect an arbitrary one-way
+failure instantly, so the protocol does not promise simultaneous fail-stop
+behavior without an additional coordination/liveness assumption.
+
 ## LAN relay behaviour
 
 For a LAN invitation, the joining backend transparently relays the same event

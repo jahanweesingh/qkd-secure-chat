@@ -28,7 +28,7 @@ from app.repository import (
     MessageIdConflictError,
     SQLiteMessageRepository,
 )
-from app.schemas import E2EEHelloCommand, EncryptedMessageCommand
+from app.schemas import BB84ControlCommand, E2EEHelloCommand, EncryptedMessageCommand
 
 from .conftest import receive_initial, socket_url
 
@@ -81,6 +81,21 @@ def encrypted_message(
         ),
         "iv": encode_base64url(bytes([iv_byte]) * 12),
         "ciphertext": encode_base64url(ciphertext),
+    }
+
+
+def bb84_control(room_id: str = "demo", *, sequence: int = 0) -> dict[str, object]:
+    return {
+        "type": "bb84_control",
+        "version": "bb84-endpoint-v1",
+        "room_id": room_id,
+        "pair_key_id": pair_key_id(room_id, [raw_public_key(1), raw_public_key(2)]),
+        "run_id": encode_base64url(bytes([9]) * 16),
+        "sender_key_id": public_key_id(raw_public_key(1)),
+        "recipient_key_id": public_key_id(raw_public_key(2)),
+        "sequence": sequence,
+        "nonce": encode_base64url(bytes(4) + sequence.to_bytes(8, "big")),
+        "ciphertext": encode_base64url(bytes(16)),
     }
 
 
@@ -158,6 +173,59 @@ def test_strict_hello_validation_rejects_mismatch_shape_and_extra_fields() -> No
     ):
         with pytest.raises(ValidationError):
             E2EEHelloCommand.model_validate(invalid)
+
+
+def test_bb84_control_schema_checks_bounds_and_forbids_inner_fields() -> None:
+    valid = bb84_control()
+    assert BB84ControlCommand.model_validate(valid).model_dump(mode="json") == valid
+    for invalid in (
+        {**valid, "run_id": "short"},
+        {**valid, "nonce": encode_base64url(bytes(11))},
+        {**valid, "sequence": 65_536},
+        {**valid, "ciphertext": "!"},
+        {**valid, "contribution": "must-not-be-an-envelope-field"},
+    ):
+        with pytest.raises(ValidationError):
+            BB84ControlCommand.model_validate(invalid)
+
+
+def test_bb84_control_is_routed_opaque_to_peer_and_not_stored(tmp_path: Path) -> None:
+    with TestClient(create_app(phase4_settings(tmp_path / "bb84-control.db"))) as client:
+        _assert_bb84_control_is_routed_opaque(client)
+
+
+def _assert_bb84_control_is_routed_opaque(client: TestClient) -> None:
+    with client.websocket_connect(socket_url()) as alice:
+        receive_initial(alice)
+        with client.websocket_connect(socket_url(client_id="bob", display_name="Bob")) as bob:
+            receive_initial(bob)
+            alice.receive_json()
+            register_pair(alice, bob)
+
+            event = bb84_control()
+            alice.send_json(event)
+            assert bob.receive_json() == event
+            assert client.get("/api/rooms/demo/messages").json()["messages"] == []
+
+
+def test_bb84_control_rejects_pair_mismatch_without_forwarding(tmp_path: Path) -> None:
+    with TestClient(create_app(phase4_settings(tmp_path / "bb84-control-mismatch.db"))) as client:
+        _assert_bb84_pair_mismatch_is_rejected(client)
+
+
+def _assert_bb84_pair_mismatch_is_rejected(client: TestClient) -> None:
+    with client.websocket_connect(socket_url()) as alice:
+        receive_initial(alice)
+        with client.websocket_connect(socket_url(client_id="bob", display_name="Bob")) as bob:
+            receive_initial(bob)
+            alice.receive_json()
+            register_pair(alice, bob)
+
+            event = bb84_control()
+            event["recipient_key_id"] = public_key_id(raw_public_key(3))
+            alice.send_json(event)
+            assert alice.receive_json()["code"] == "bb84_control_invalid"
+            assert client.get("/api/rooms/demo/messages").json()["messages"] == []
 
 
 def test_envelope_validation_enforces_iv_tag_and_4096_plaintext_byte_cap() -> None:

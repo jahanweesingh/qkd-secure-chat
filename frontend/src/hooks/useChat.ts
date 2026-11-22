@@ -14,6 +14,20 @@ import {
   normalizeBb84Result,
 } from '../bb84';
 import {
+  Bb84ControlReceiver,
+  Bb84ControlSender,
+  normalizeBb84ControlEnvelope,
+} from '../bb84Control';
+import type { Bb84ControlKeys } from '../e2ee';
+import {
+  createBb84KeyConfirmation,
+  deriveBb84ControlKeys,
+  deriveBb84EpochKeys,
+} from '../e2ee';
+import { EndpointBb84ChatSession, EMPTY_ENDPOINT_BB84_PROGRESS } from '../bb84ChatSession';
+import type { EndpointBb84Progress } from '../bb84ChatSession';
+import type { EndpointRole } from '../bb84Endpoint';
+import {
   decryptText,
   deriveContext,
   E2EE_KEY_ALGORITHM,
@@ -53,6 +67,7 @@ const PEER_PIN_STORAGE_PREFIX = 'qkd-chat-e2ee-peer-pin';
 const EMPTY_ENCRYPTION: EncryptionInfo = {
   state: 'idle',
   canSend: false,
+  activeKeyMode: null,
   verificationCode: null,
   verifiedAt: null,
   peerName: null,
@@ -61,6 +76,21 @@ const EMPTY_ENCRYPTION: EncryptionInfo = {
   sessionKeyId: null,
   keyStorage: null,
   error: null,
+};
+
+type EndpointBb84Run = {
+  role: EndpointRole;
+  runId: Uint8Array;
+  keys: Bb84ControlKeys;
+  sender: Bb84ControlSender;
+  receiver: Bb84ControlReceiver;
+  protocol: EndpointBb84ChatSession;
+  hybridContext: E2eeContext | null;
+  confirmationKey: CryptoKey | null;
+  transcriptHash: Uint8Array | null;
+  peerKeyConfirmed: boolean;
+  localAckSent: boolean;
+  peerAckReceived: boolean;
 };
 
 function verificationStorageKey(roomId: string, keyId: string): string {
@@ -127,6 +157,33 @@ function newMessageId(): string {
   return `message-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function decodeBase64Url(value: string): Uint8Array {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(normalized + '='.repeat((4 - normalized.length % 4) % 4));
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+function encodeBase64Url(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function requireExactFields(payload: Record<string, unknown>, fields: string[]): void {
+  const actual = Object.keys(payload).sort();
+  const expected = [...fields].sort();
+  if (actual.length !== expected.length || actual.some((field, index) => field !== expected[index])) {
+    throw new Error('BB84 key-confirmation message has unexpected or missing fields.');
+  }
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) difference |= left[index] ^ right[index];
+  return difference === 0;
+}
+
 function sortMessages(messages: ChatMessage[]): ChatMessage[] {
   return [...messages].sort((left, right) => {
     const delta = Date.parse(left.sentAt) - Date.parse(right.sentAt);
@@ -180,6 +237,9 @@ export interface ChatController {
   acceptChangedKey: () => void;
   retryEncryption: () => void;
   runBb84: (config: Bb84Config) => boolean;
+  endpointBb84: EndpointBb84Progress;
+  startEndpointBb84: (config: Bb84Config) => boolean;
+  useEcdhFallback: () => void;
   setTyping: (isTyping: boolean) => void;
   reconnect: () => void;
 }
@@ -205,6 +265,7 @@ export function useChat(
   const [bb84Result, setBb84Result] = useState<Bb84Result | null>(null);
   const [bb84State, setBb84State] = useState<Bb84RunState>('idle');
   const [bb84Error, setBb84Error] = useState<string | null>(null);
+  const [endpointBb84, setEndpointBb84] = useState<EndpointBb84Progress>({ ...EMPTY_ENDPOINT_BB84_PROGRESS });
   const [reconnectToken, setReconnectToken] = useState(0);
   const socketRef = useRef<WebSocket | null>(null);
   const typingTimeoutsRef = useRef<Record<string, number>>({});
@@ -214,8 +275,13 @@ export function useChat(
   const identityRef = useRef<E2eeIdentity | null>(null);
   const identityPromiseRef = useRef<Promise<E2eeIdentity> | null>(null);
   const contextRef = useRef<E2eeContext | null>(null);
+  const fallbackContextRef = useRef<E2eeContext | null>(null);
   const peerClientIdRef = useRef<string | null>(null);
-  const contextsRef = useRef<Map<string, E2eeContext>>(new Map());
+  // A room key-pair ID stays stable across ECDH and hybrid epochs because the
+  // relay validates it against the public-key pair. Keep both local contexts
+  // so old ECDH chat history remains decryptable after a future epoch switch.
+  const contextsRef = useRef<Map<string, E2eeContext[]>>(new Map());
+  const endpointRunRef = useRef<EndpointBb84Run | null>(null);
   const pendingEncryptedRef = useRef<Map<string, ChatMessage>>(new Map());
   const peerPinRef = useRef<string | null>(null);
   const identityRotationRequiredRef = useRef(false);
@@ -275,7 +341,11 @@ export function useChat(
     setBb84Result(null);
     setBb84State('idle');
     setBb84Error(null);
+    setEndpointBb84({ ...EMPTY_ENDPOINT_BB84_PROGRESS });
+    endpointRunRef.current?.protocol.abort('Room changed. Start a new BB84 run.');
+    endpointRunRef.current = null;
     contextRef.current = null;
+    fallbackContextRef.current = null;
     peerClientIdRef.current = null;
     contextsRef.current = new Map();
     identityRef.current = null;
@@ -347,10 +417,12 @@ export function useChat(
     const failEncryption = (message: string, expectedSocket = processingSocket ?? socketRef.current) => {
       observe('encryption_failed', {}, expectedSocket);
       contextRef.current = null;
+      fallbackContextRef.current = null;
       updateEncryption((current) => ({
         ...current,
         state: 'failed',
         canSend: false,
+        activeKeyMode: null,
         error: message,
       }));
     };
@@ -395,8 +467,8 @@ export function useChat(
       };
       const payload = message.encryption;
       if (!payload || !message.clientMessageId) return;
-      const context = contextsRef.current.get(payload.keyId);
-      if (!context) {
+      const candidateContexts = contextsRef.current.get(payload.keyId) ?? [];
+      if (candidateContexts.length === 0) {
         pendingEncryptedRef.current.set(message.id, message);
         if (contextRef.current) {
           pendingEncryptedRef.current.delete(message.id);
@@ -409,12 +481,22 @@ export function useChat(
         return;
       }
       try {
-        const text = await decryptText(context, payload, {
-          roomId: session.roomCode,
-          senderId: message.senderId,
-          senderName: message.senderName,
-          clientMessageId: message.clientMessageId,
-        });
+        let text: string | null = null;
+        let lastError: unknown;
+        for (const context of candidateContexts) {
+          try {
+            text = await decryptText(context, payload, {
+              roomId: session.roomCode,
+              senderId: message.senderId,
+              senderName: message.senderName,
+              clientMessageId: message.clientMessageId,
+            });
+            break;
+          } catch (error) {
+            lastError = error;
+          }
+        }
+        if (text === null) throw lastError ?? new Error('No local chat key authenticated this message.');
         if (disposed) return;
         observe('message_decrypted', traceDetail, observationSocket);
         pendingEncryptedRef.current.delete(message.id);
@@ -510,8 +592,13 @@ export function useChat(
           storePeerPin(session, publicKeyId);
         }
         contextRef.current = context;
+        fallbackContextRef.current = context;
         peerClientIdRef.current = peerClientId || peerClientIdRef.current;
-        contextsRef.current.set(context.keyId, context);
+        const existingContexts = contextsRef.current.get(context.keyId) ?? [];
+        contextsRef.current.set(context.keyId, [
+          context,
+          ...existingContexts.filter((item) => item.sendKey !== context.sendKey),
+        ]);
         const verifiedAt = keyChanged ? null : readVerification(session.roomCode, context.keyId);
         updateEncryption({
           state: keyChanged
@@ -520,6 +607,7 @@ export function useChat(
               ? 'encrypted_verified'
               : 'encrypted_unverified',
           canSend: !keyChanged,
+          activeKeyMode: 'ecdh',
           verificationCode: context.verificationCode,
           verifiedAt,
           peerName,
@@ -574,10 +662,172 @@ export function useChat(
       }
     };
 
+    const maybeActivateBb84Epoch = async (run: EndpointBb84Run) => {
+      if (endpointRunRef.current !== run || !run.hybridContext || !run.peerKeyConfirmed
+        || !run.localAckSent || !run.peerAckReceived) return;
+      const baseContext = fallbackContextRef.current;
+      if (!baseContext || baseContext.keyId !== run.hybridContext.keyId) {
+        throw new Error('The ECDH fallback context changed before BB84 activation.');
+      }
+      const contexts = contextsRef.current.get(run.hybridContext.keyId) ?? [];
+      contextsRef.current.set(run.hybridContext.keyId, [
+        run.hybridContext,
+        baseContext,
+        ...contexts.filter((context) => context.sendKey !== run.hybridContext!.sendKey
+          && context.sendKey !== baseContext.sendKey),
+      ]);
+      contextRef.current = run.hybridContext;
+      updateEncryption((current) => ({
+        ...current,
+        canSend: true,
+        activeKeyMode: 'bb84_hybrid',
+        sessionKeyId: run.hybridContext!.keyId,
+        error: null,
+      }));
+      run.protocol.markKeyConfirmed();
+    };
+
+    const makeEndpointWire = (
+      role: EndpointRole,
+      runId: Uint8Array,
+      sender: Bb84ControlSender,
+      identity: E2eeIdentity,
+      baseContext: E2eeContext,
+      socket: WebSocket,
+    ) => ({
+      onProgress: setEndpointBb84,
+      send: async (message: { kind: string; payload: Record<string, unknown> }) => {
+        if (socket !== socketRef.current || socket.readyState !== WebSocket.OPEN) {
+          throw new Error('Room disconnected during BB84 exchange.');
+        }
+        socket.send(JSON.stringify(await sender.seal(message)));
+      },
+      onContribution: async (contribution: Uint8Array, transcriptHash: Uint8Array) => {
+        const run = endpointRunRef.current;
+        if (!run || !bytesEqual(run.runId, runId)) throw new Error('BB84 run changed before key confirmation.');
+        const epoch = await deriveBb84EpochKeys(identity, baseContext, contribution, transcriptHash);
+        contribution.fill(0);
+        run.hybridContext = epoch.context;
+        run.confirmationKey = epoch.confirmationKey;
+        run.transcriptHash = transcriptHash.slice();
+        const mac = await createBb84KeyConfirmation(epoch.confirmationKey, transcriptHash, role);
+        run.localAckSent = false;
+        if (socket !== socketRef.current || socket.readyState !== WebSocket.OPEN) {
+          throw new Error('Room disconnected before BB84 key confirmation.');
+        }
+        socket.send(JSON.stringify(await sender.seal({
+          kind: 'key_confirm', payload: { role, mac: encodeBase64Url(mac) },
+        })));
+      },
+    });
+
+    const handleKeyConfirmation = async (
+      run: EndpointBb84Run,
+      role: EndpointRole,
+      kind: 'key_confirm' | 'key_confirm_ack',
+      payload: Record<string, unknown>,
+      socket: WebSocket | null,
+    ) => {
+      if (!run.confirmationKey || !run.transcriptHash || !run.hybridContext || !socket) {
+        throw new Error('Hybrid key material is not ready for confirmation.');
+      }
+      requireExactFields(payload, ['role', 'mac']);
+      const peerRole: EndpointRole = role === 'alice' ? 'bob' : 'alice';
+      if (payload.role !== peerRole || typeof payload.mac !== 'string') {
+        throw new Error('BB84 key-confirmation message has an invalid role or MAC.');
+      }
+      const receivedMac = decodeBase64Url(payload.mac);
+      const purpose = kind === 'key_confirm' ? 'confirm' : 'ack';
+      const expectedMac = await createBb84KeyConfirmation(run.confirmationKey, run.transcriptHash, peerRole, purpose);
+      if (!bytesEqual(receivedMac, expectedMac)) throw new Error('BB84 key confirmation failed. ECDH chat remains active.');
+      if (kind === 'key_confirm') {
+        if (run.peerKeyConfirmed) throw new Error('BB84 key confirmation was replayed.');
+        run.peerKeyConfirmed = true;
+        const ack = await createBb84KeyConfirmation(run.confirmationKey, run.transcriptHash, role, 'ack');
+        run.localAckSent = true;
+        socket.send(JSON.stringify(await run.sender.seal({
+          kind: 'key_confirm_ack', payload: { role, mac: encodeBase64Url(ack) },
+        })));
+      } else {
+        if (!run.localAckSent || run.peerAckReceived) throw new Error('BB84 key-confirmation acknowledgement was replayed or premature.');
+        run.peerAckReceived = true;
+      }
+      await maybeActivateBb84Epoch(run);
+    };
+
+    const handleBb84Control = async (event: Record<string, unknown>) => {
+      const socket = processingSocket ?? socketRef.current;
+      const envelope = normalizeBb84ControlEnvelope(event);
+      const identity = await ensureIdentity();
+      const baseContext = contextRef.current;
+      if (!baseContext || !encryptionRef.current.canSend) throw new Error('ECDH chat keys are not ready for BB84 control.');
+      if (envelope.room_id !== session.roomCode
+        || envelope.pair_key_id !== baseContext.keyId
+        || envelope.sender_key_id !== baseContext.peerPublicKeyId
+        || envelope.recipient_key_id !== identity.publicKeyId) {
+        throw new Error('BB84 control packet does not match the active room peer.');
+      }
+      const incomingRunId = decodeBase64Url(envelope.run_id);
+      let active = endpointRunRef.current;
+      if (!active || !bytesEqual(active.runId, incomingRunId)) {
+        const canReplace = !active || ['complete', 'failed'].includes(active.protocol.currentStatus);
+        if (!canReplace || envelope.sequence !== 0) throw new Error('Unexpected BB84 run or replayed offer.');
+        const keys = await deriveBb84ControlKeys(
+          identity, baseContext.peerPublicKey, session.roomCode, baseContext.keyId, incomingRunId,
+        );
+        const header = {
+          roomId: session.roomCode,
+          pairKeyId: baseContext.keyId,
+          senderKeyId: identity.publicKeyId,
+          recipientKeyId: baseContext.peerPublicKeyId,
+        };
+        const sender = new Bb84ControlSender(keys, header);
+        const receiver = new Bb84ControlReceiver(keys, {
+          roomId: session.roomCode,
+          pairKeyId: baseContext.keyId,
+          runId: incomingRunId,
+          senderKeyId: baseContext.peerPublicKeyId,
+          recipientKeyId: identity.publicKeyId,
+        });
+        const protocol = new EndpointBb84ChatSession(
+          'bob', incomingRunId,
+          makeEndpointWire('bob', incomingRunId, sender, identity, baseContext, socket!),
+        );
+        active = {
+          role: 'bob', runId: incomingRunId, keys, sender, receiver, protocol,
+          hybridContext: null, confirmationKey: null, transcriptHash: null,
+          peerKeyConfirmed: false, localAckSent: false, peerAckReceived: false,
+        };
+        endpointRunRef.current = active;
+      }
+      const message = await active.receiver.open(event);
+      if (message.kind === 'key_confirm' || message.kind === 'key_confirm_ack') {
+        await handleKeyConfirmation(active, active.role, message.kind, message.payload, socket);
+      } else {
+        await active.protocol.receive(message);
+      }
+    };
+
     const handleMessage = async (rawPayload: string) => {
       const event = parseSocketPayload(rawPayload);
       if (!event) return;
       const type = readEventType(event);
+
+      if (type === 'bb84_control') {
+        try {
+          await handleBb84Control(event);
+        } catch (error) {
+          const active = endpointRunRef.current;
+          active?.protocol.abort(error instanceof Error ? error.message : 'BB84 control exchange failed.');
+          endpointRunRef.current = null;
+          setEndpointBb84((current) => ({
+            ...current,
+            status: 'failed',
+            error: error instanceof Error ? error.message : 'BB84 control exchange failed.',
+          }));
+        }
+        return;
+      }
 
       if (type === 'bb84_result') {
         window.clearTimeout(bb84TimeoutRef.current);
@@ -691,12 +941,19 @@ export function useChat(
           : participant.online;
         setParticipants((current) => mergeParticipant(current, { ...participant, online }));
         if (!online && participant.id === peerClientIdRef.current) {
+          endpointRunRef.current?.protocol.abort('Peer disconnected during BB84 exchange. Start a new run after reconnecting.');
+          endpointRunRef.current = null;
+          setEndpointBb84((current) => current.status === 'complete' || current.status === 'idle'
+            ? current
+            : { ...current, status: 'failed', error: 'Peer disconnected. Start a new BB84 run after reconnecting.' });
           peerAdvertisementGeneration += 1;
           contextRef.current = null;
+          fallbackContextRef.current = null;
           updateEncryption((current) => ({
             ...current,
             state: 'waiting_for_peer',
             canSend: false,
+            activeKeyMode: null,
             error: 'Your partner disconnected. Sending will resume after their browser key returns.',
           }));
         }
@@ -740,6 +997,13 @@ export function useChat(
       if (type === 'error') {
         const code = readString(event, ['code']).toLowerCase();
         let message = readString(event, ['message', 'detail'], 'The server rejected that action.');
+        if (endpointRunRef.current && [
+          'peer_unreachable', 'bb84_control_invalid', 'e2ee_not_ready',
+        ].includes(code)) {
+          endpointRunRef.current.protocol.abort(message);
+          endpointRunRef.current = null;
+          setEndpointBb84((current) => ({ ...current, status: 'failed', error: message }));
+        }
         if (code === 'peer_unreachable') {
           message = peerUnreachableMessage();
         }
@@ -747,7 +1011,7 @@ export function useChat(
           message = 'This invitation code does not contain a valid private IPv4 host address. Ask the room creator for a new code.';
         }
         if (code === 'origin_not_allowed') {
-          message = 'This browser was refused by the chat server. Update and restart the project on both Macs, then try again.';
+          message = 'This browser origin is not on the chat server allowlist. Add this exact site origin to ALLOWED_ORIGINS on the host and restart the backend.';
         }
         if ([
           'e2ee_not_ready',
@@ -760,6 +1024,7 @@ export function useChat(
             identityRotationRequiredRef.current = true;
             reverificationRequiredRef.current = true;
             contextsRef.current = new Map();
+            fallbackContextRef.current = null;
             peerAdvertisementGeneration += 1;
           }
           failEncryption(code === 'e2ee_key_mismatch'
@@ -918,6 +1183,11 @@ export function useChat(
         if (disposed) return;
         if (socketRef.current !== socket) return;
         observe('connection_closed', {}, socket);
+        if (endpointRunRef.current && !['complete', 'failed'].includes(endpointRunRef.current.protocol.currentStatus)) {
+          endpointRunRef.current.protocol.abort('Room disconnected during BB84 exchange. Start a new run after reconnecting.');
+          endpointRunRef.current = null;
+          setEndpointBb84((current) => ({ ...current, status: 'failed', error: 'Room disconnected during BB84 exchange.' }));
+        }
         window.clearInterval(pingTimer);
         peerAdvertisementGeneration += 1;
         socketRef.current = null;
@@ -968,6 +1238,10 @@ export function useChat(
 
     return () => {
       disposed = true;
+      if (endpointRunRef.current && !['complete', 'failed'].includes(endpointRunRef.current.protocol.currentStatus)) {
+        endpointRunRef.current.protocol.abort('Room session ended.');
+        endpointRunRef.current = null;
+      }
       peerAdvertisementGeneration += 1;
       messageQueue.length = 0;
       clearTimers();
@@ -1082,6 +1356,7 @@ export function useChat(
           identityRotationRequiredRef.current = true;
           reverificationRequiredRef.current = true;
           contextRef.current = null;
+          fallbackContextRef.current = null;
           contextsRef.current = new Map();
         }
         setMessages((current) => current.map((item) =>
@@ -1097,10 +1372,12 @@ export function useChat(
         }));
         if (!detail.includes('1-4096 bytes')) {
           contextRef.current = null;
+          fallbackContextRef.current = null;
           updateEncryption((current) => ({
             ...current,
             state: 'failed',
             canSend: false,
+            activeKeyMode: null,
             error: ivGenerationFailed
               ? 'The browser repeated an AES-GCM IV. Sending is paused until a fresh encryption identity is created.'
               : 'The browser encryption operation failed. No plaintext was sent.',
@@ -1220,6 +1497,7 @@ export function useChat(
         verificationCode: null,
         verifiedAt: null,
         sessionKeyId: null,
+            activeKeyMode: null,
         error: null,
       }));
 
@@ -1230,6 +1508,7 @@ export function useChat(
           recordSecurityTrace('identity_ready', {}, generation);
           identityPromiseRef.current = Promise.resolve(identity);
           contextRef.current = null;
+          fallbackContextRef.current = null;
           contextsRef.current = new Map();
           identityRotationRequiredRef.current = false;
           reverificationRequiredRef.current = true;
@@ -1241,6 +1520,7 @@ export function useChat(
             verifiedAt: null,
             localKeyId: identity.publicKeyId,
             sessionKeyId: null,
+            activeKeyMode: null,
             keyStorage: identity.storage,
             error: null,
           }));
@@ -1252,6 +1532,7 @@ export function useChat(
             ...current,
             state: 'failed',
             canSend: false,
+            activeKeyMode: null,
             error: 'This browser could not rotate its encryption identity. Sending remains paused.',
           }));
         })
@@ -1271,7 +1552,7 @@ export function useChat(
       return;
     }
     const existingContext = encryptionRef.current.sessionKeyId
-      ? contextsRef.current.get(encryptionRef.current.sessionKeyId) ?? null
+      ? contextsRef.current.get(encryptionRef.current.sessionKeyId)?.[0] ?? null
       : null;
     contextRef.current = existingContext;
     updateEncryption((current) => ({
@@ -1296,13 +1577,16 @@ export function useChat(
         ...current,
         state: verifiedAt ? 'encrypted_verified' : 'encrypted_unverified',
         canSend: true,
+        activeKeyMode: current.activeKeyMode ?? 'ecdh',
         verifiedAt,
         error: null,
-      }) : ({ ...current, state: 'waiting_for_peer' }));
+      }) : ({ ...current, state: 'waiting_for_peer', canSend: false, activeKeyMode: null }));
     } catch {
       updateEncryption((current) => ({
         ...current,
         state: 'failed',
+        canSend: false,
+        activeKeyMode: null,
         error: 'The encryption setup request could not be sent.',
       }));
     }
@@ -1339,6 +1623,115 @@ export function useChat(
     }
   }, [session]);
 
+  const startEndpointBb84 = useCallback((config: Bb84Config): boolean => {
+    const socket = socketRef.current;
+    const baseContext = contextRef.current;
+    const identity = identityRef.current;
+    if (!session || !socket || socket.readyState !== WebSocket.OPEN || !baseContext || !identity
+      || !encryptionRef.current.canSend) {
+      setEndpointBb84({
+        status: 'failed', role: 'alice', percent: 0, qberPpm: null,
+        error: 'Connect to a room with an established ECDH chat session before starting BB84.',
+      });
+      return false;
+    }
+    if (endpointRunRef.current && !['complete', 'failed'].includes(endpointRunRef.current.protocol.currentStatus)) {
+      setEndpointBb84((current) => ({ ...current, error: 'A BB84 protocol run is already active.' }));
+      return false;
+    }
+    const runId = crypto.getRandomValues(new Uint8Array(16));
+    setEndpointBb84({ status: 'preparing', role: 'alice', percent: 0, qberPpm: null, error: null });
+    void (async () => {
+      try {
+        const keys = await deriveBb84ControlKeys(
+          identity, baseContext.peerPublicKey, session.roomCode, baseContext.keyId, runId,
+        );
+        if (socketRef.current !== socket || socket.readyState !== WebSocket.OPEN
+          || contextRef.current !== baseContext) throw new Error('Room or peer keys changed before BB84 could start.');
+        const header = {
+          roomId: session.roomCode,
+          pairKeyId: baseContext.keyId,
+          senderKeyId: identity.publicKeyId,
+          recipientKeyId: baseContext.peerPublicKeyId,
+        };
+        const sender = new Bb84ControlSender(keys, header);
+        const receiver = new Bb84ControlReceiver(keys, {
+          roomId: session.roomCode,
+          pairKeyId: baseContext.keyId,
+          runId,
+          senderKeyId: baseContext.peerPublicKeyId,
+          recipientKeyId: identity.publicKeyId,
+        });
+        const protocol = new EndpointBb84ChatSession(
+          'alice', runId,
+          {
+            onProgress: setEndpointBb84,
+            send: async (message) => {
+              if (socketRef.current !== socket || socket.readyState !== WebSocket.OPEN) {
+                throw new Error('Room disconnected during BB84 exchange.');
+              }
+              socket.send(JSON.stringify(await sender.seal(message)));
+            },
+            onContribution: async (contribution, transcriptHash) => {
+              const activeRun = endpointRunRef.current;
+              if (!activeRun || !bytesEqual(activeRun.runId, runId)) {
+                throw new Error('BB84 run changed before key confirmation.');
+              }
+              const epoch = await deriveBb84EpochKeys(identity, baseContext, contribution, transcriptHash);
+              contribution.fill(0);
+              activeRun.hybridContext = epoch.context;
+              activeRun.confirmationKey = epoch.confirmationKey;
+              activeRun.transcriptHash = transcriptHash.slice();
+              const mac = await createBb84KeyConfirmation(epoch.confirmationKey, transcriptHash, 'alice');
+              if (socketRef.current !== socket || socket.readyState !== WebSocket.OPEN) {
+                throw new Error('Room disconnected before BB84 key confirmation.');
+              }
+              socket.send(JSON.stringify(await sender.seal({
+                kind: 'key_confirm', payload: { role: 'alice', mac: encodeBase64Url(mac) },
+              })));
+            },
+          },
+        );
+        endpointRunRef.current = {
+          role: 'alice', runId, keys, sender, receiver, protocol,
+          hybridContext: null, confirmationKey: null, transcriptHash: null,
+          peerKeyConfirmed: false, localAckSent: false, peerAckReceived: false,
+        };
+        await protocol.startAlice({
+          noisePpm: Math.round(config.noiseProbability * 1_000_000),
+          interceptPpm: Math.round(config.interceptProbability * 1_000_000),
+          qberThresholdPpm: Math.round(config.qberThreshold * 1_000_000),
+        });
+      } catch (error) {
+        endpointRunRef.current?.protocol.abort(error instanceof Error ? error.message : 'BB84 run failed.');
+        endpointRunRef.current = null;
+        setEndpointBb84({
+          status: 'failed', role: 'alice', percent: 0, qberPpm: null,
+          error: error instanceof Error ? error.message : 'BB84 run failed.',
+        });
+      }
+    })();
+    return true;
+  }, [session]);
+
+  const useEcdhFallback = useCallback(() => {
+    const fallback = fallbackContextRef.current;
+    if (!session || !fallback || socketRef.current?.readyState !== WebSocket.OPEN) return;
+    contextRef.current = fallback;
+    const contexts = contextsRef.current.get(fallback.keyId) ?? [];
+    contextsRef.current.set(fallback.keyId, [fallback, ...contexts.filter((context) => context.sendKey !== fallback.sendKey)]);
+    const verifiedAt = readVerification(session.roomCode, fallback.keyId);
+    updateEncryption((current) => ({
+      ...current,
+      state: verifiedAt ? 'encrypted_verified' : 'encrypted_unverified',
+      canSend: true,
+      activeKeyMode: 'ecdh',
+      sessionKeyId: fallback.keyId,
+      verifiedAt,
+      error: null,
+    }));
+  }, [session, updateEncryption]);
+
   const setTyping = useCallback((isTyping: boolean) => {
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
@@ -1363,6 +1756,7 @@ export function useChat(
     bb84Result,
     bb84State,
     bb84Error,
+    endpointBb84,
     sendMessage,
     retryMessage,
     verifyEncryption,
@@ -1370,6 +1764,8 @@ export function useChat(
     acceptChangedKey,
     retryEncryption,
     runBb84,
+    startEndpointBb84,
+    useEcdhFallback,
     setTyping,
     reconnect,
   };

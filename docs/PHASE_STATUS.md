@@ -1,5 +1,20 @@
 # Project Phase Status
 
+## Current status — 23 November 2026
+
+The application supports the original ECDH-only encrypted chat and an opt-in
+endpoint-owned BB84 + ECDH hybrid mode. Alice and Bob independently simulate
+BB84 in their browsers; protected WebSocket relay messages carry the protocol
+exchange. Only matching contributions with successful mutual confirmation can
+activate a hybrid epoch. The room-hosted BB84 teaching report remains a
+separate educational run. This is a software simulation, provides no security
+independent of ECDH, and is not physical QKD. See the current
+[protocol and implementation record](BB84_AES_INTEGRATION_PLAN.md).
+
+Notes below labelled by earlier dates record the project state at those dates;
+they are historical and are superseded by this status and the current protocol
+record.
+
 > **Simpler dashboard (13 November 2026):** the encryption demo now has a
 > compact message → ciphertext → recovered-text view and a separate local
 > exercise with inspectable, disposable ECDH/HKDF/AES keys. Live chat can show
@@ -20,20 +35,13 @@
 > for the capability gate, key lifecycle, quotas and limitations. Text key
 > establishment and the independent BB84 simulation remain unchanged.
 
-## November 2026 interface upgrade
+## BB84 modes
 
-Implemented: a beginner-friendly **BB84 Security Lab**, seven-step review of
-actual results, expandable settings/diagnostics, real browser-encryption status,
-and distinct explanations for sample rejection and post-processing failure.
-The simulation still returns a single result, so the walkthrough is explicitly
-a completed-result review, not a live per-stage stream. Secret values remain hidden.
-
-**Not implemented: BB84-assisted AES keys.** The existing ECDH-only mode remains
-the working encryption mode. A backend-generated contribution cannot become
-unknown to that backend by encrypting it afterward. The endpoint-owned design
-requires a new control protocol and epoch/history lifecycle, documented in
-[BB84_AES_INTEGRATION_PLAN.md](BB84_AES_INTEGRATION_PLAN.md). This is an
-implementation plan, not an activated or audited cryptographic mode.
+The **BB84 Security Lab** presents the endpoint-owned exchange and the separate
+room-hosted teaching report. Endpoint progress, QBER, contribution, mutual
+confirmation and epoch status come from browser runtime state. A lab report or
+a BB84 run that did not activate a confirmed epoch cannot change chat keys.
+Advanced details and teaching results do not expose secret key bytes.
 
 ## Current implementation
 
@@ -41,13 +49,14 @@ This repository contains the first working Phase 4 classroom E2EE slice. It
 retains the two-person chat, dual-Mac LAN relay, shared BB84/QBER experiment and
 Phase 3 post-processing model, then adds browser-to-browser encrypted chat.
 
-The chat path now includes:
+The chat path includes:
 
 - non-extractable P-256 ECDH private keys created in each browser;
 - IndexedDB persistence scoped to the room/profile, with a visible page-session
   fallback when persistence is unavailable;
 - strict `e2ee-v1` public-key advertisements;
-- HKDF-SHA-256 directional AES-256-GCM keys;
+- ECDH-only fallback plus optional BB84 + ECDH hybrid HKDF-SHA-256 directional
+  AES-256-GCM keys, activated only after mutual confirmation;
 - fresh random 96-bit IVs, a local per-send-key duplicate check and a durable
   backend per-room, pair and sender-key uniqueness constraint;
 - AES-GCM authenticated additional data for room, sender, message and key
@@ -58,9 +67,10 @@ The chat path now includes:
 - ciphertext-only SQLite rows for encrypted messages; and
 - an immutable `e2ee_required` room lock that rejects plaintext fallback.
 
-The backend validates and relays public keys and opaque envelopes. It does not
-perform ECDH or AES-GCM and does not receive browser private keys, derived AES
-keys or encrypted-message plaintext.
+The backend validates and relays public keys, opaque message envelopes and
+protected BB84 control envelopes. It does not perform ECDH or AES-GCM and does
+not receive BB84 contributions, browser private keys, derived AES keys or
+encrypted-message plaintext.
 
 ## How to run Phase 4 on two Macs
 
@@ -77,7 +87,8 @@ private network.
 
 ## Encryption and verification meaning
 
-The browser states have distinct meanings:
+The browser states have distinct meanings in both ECDH-only and confirmed
+hybrid modes:
 
 - **Setting up / Waiting for partner:** no send key is ready, so sending is
   disabled.
@@ -159,9 +170,11 @@ Phase 3 continues to model:
 - internal HMAC-SHA-256 confirmation; and
 - context-bound HKDF-SHA-256 demonstration output that is discarded.
 
-That entire path still runs as a classical simulation inside the creator
-backend. It is not physical QKD or a finite-key proof. It never supplies Phase
-4 browser keys and never changes chat encryption state.
+That room-hosted teaching path still runs as a classical simulation inside the
+creator backend. It is not physical QKD or a finite-key proof. Its output never
+supplies Phase 4 browser keys or changes chat state. The separate
+endpoint-owned browser protocol may contribute to a hybrid chat epoch after
+mutual confirmation.
 
 ## Deliberately not implemented
 

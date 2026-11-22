@@ -26,24 +26,22 @@ includes beginner-friendly answers to common panel questions.
 
 ## BB84 Security Lab upgrade
 
-The lab now explains the experiment in seven plain-language steps, with Alice,
-Bob and Eve, actual counts and encoding choices, and a clear completed/stopped
-outcome. Select **BB84 lab** in the chat, then **Start BB84 Experiment**.
-The server returns one completed report; the step controls review that report
-at your pace, rather than pretending to show live simulation progress.
-Advanced settings and the original technical diagnostics remain expandable.
+The **BB84 lab** contains two distinct activities. **Start BB84 key exchange**
+runs the endpoint-owned software simulation independently in both browsers.
+Only after reconciliation, privacy amplification and mutual key confirmation
+does the browser activate a hybrid chat-key epoch. **Start BB84 Experiment**
+runs the room-hosted teaching simulation and does not set chat keys. The lab
+shows their statuses separately; neither activity displays secret key bytes.
+The separate learning exercise intentionally displays only disposable keys.
 
-**Chat still uses ECDH and AES-256-GCM. BB84 is not connected to its key
-derivation.** The lab's chat status now comes from the actual browser encryption
-state, not a fixed “active” label. A passed sample can still fail the later
-key-preparation checks. The BB84 lab displays no private bits or key values;
-the separate learning exercise intentionally displays its disposable keys.
-
-Read [the integration design decision](docs/BB84_AES_INTEGRATION_PLAN.md) for
-the current key lifecycle, why server-owned BB84 output is unsuitable for the
-requested endpoint-owned design, and the versioned protocol needed next.
-See [the upgrade delivery report](docs/SECURITY_LAB_UPGRADE.md) for the change
-list, mentor walkthrough and actual verification results.
+When a hybrid epoch is active, each browser combines its existing ECDH shared
+secret with the matching endpoint-owned BB84 contribution and applies
+HKDF-SHA-256 to derive separate directional AES-256-GCM chat keys. Otherwise,
+chat remains in ECDH-only mode. The backend relays protected BB84 control
+messages but does not receive BB84 contribution bytes or chat keys. This is a
+software simulation, not physical QKD, and does not provide security
+independent of ECDH. See the [protocol and implementation record](docs/BB84_AES_INTEGRATION_PLAN.md)
+and the [E2EE threat model](docs/PHASE4_E2EE_THREAT_MODEL.md).
 
 QKD Chat Lab is the working **Phase 4 classroom E2EE slice** of the BB84-QKD
 Based Secure Chat Application described in the supplied project report. It
@@ -60,8 +58,9 @@ AES-256-GCM encrypted message envelopes.
 > accounts. The local stack uses HTTP on localhost; the Render deployment adds
 > managed HTTPS/WSS. Use it only for classroom and controlled demonstrations.
 >
-> The BB84 and post-processing path remains an independent server-side teaching
-> simulation. It never supplies chat keys. A seeded run is reconstructible;
+> The room-hosted BB84 teaching simulation is separate from chat keys. The
+> endpoint-owned simulation can contribute to a hybrid chat key after both
+> browsers confirm it. A seeded teaching run is reconstructible;
 > `key_material_exposed: false` means only that key bytes are omitted from its
 > JSON report.
 
@@ -70,8 +69,9 @@ AES-256-GCM encrypted message envelopes.
 - Each browser creates a non-extractable P-256 ECDH private key.
 - The room/profile key is stored in IndexedDB when supported; otherwise a
   visible session-only fallback changes after refresh.
-- HKDF-SHA-256 derives different low-key-to-high-key and high-key-to-low-key
-  AES-256-GCM keys.
+- ECDH-only mode uses HKDF-SHA-256 with the ECDH shared secret; confirmed
+  hybrid mode combines that secret with the BB84 contribution before HKDF.
+  Both modes derive separate directional AES-256-GCM keys.
 - Each message uses a random 96-bit IV, a 128-bit tag and authenticated room,
   sender, message and key context.
 - The backend stores `iv` and ciphertext/tag, never encrypted-message
@@ -108,7 +108,7 @@ Experiment controls are deliberately bounded:
 
 Results show transmitted, intercepted, sifted, sampled, mismatched and retained
 counts, the observed QBER, and an accepted or aborted policy decision. An
-accepted run continues through four teaching stages:
+accepted room-hosted teaching run continues through four stages:
 
 1. **Reconcile:** a bounded Cascade-inspired parity model attempts to correct
    Bob's retained candidate sequence and counts the disclosed parity bits.
@@ -133,8 +133,9 @@ security proof.
 The shared result includes only aggregate processing metrics and a
 representative BB84 trace of at most 24 rows. It never exposes raw or
 reconciled bits, Toeplitz seed material, confirmation tags, HKDF salt or
-derived bytes. A completed result does not encrypt, unlock or otherwise change
-the independent Phase 4 chat keys.
+derived bytes. A completed room-hosted result does not change chat keys. The
+separate endpoint-owned BB84 exchange can establish a hybrid epoch after both
+browsers confirm matching keys.
 
 ## Run it on localhost
 
@@ -292,6 +293,30 @@ Copy `.env.example` to `.env` and change values only when needed.
 If port 8080 is busy, set `APP_PORT=8090` in `.env` and include the matching
 origin, such as `http://localhost:8090`, in `ALLOWED_ORIGINS`.
 
+### Use a Cloudflare HTTPS tunnel with the local stack
+
+The local stack accepts browser origins listed in `ALLOWED_ORIGINS`. When
+using a Cloudflare Quick Tunnel, add its exact HTTPS origin to `.env`; do not
+use a wildcard. For example, if Cloudflare prints
+`https://warm-sky-123.trycloudflare.com`, set:
+
+```dotenv
+ALLOWED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080,https://warm-sky-123.trycloudflare.com
+```
+
+Keep the full list on one line, with no trailing slash or path. Restart the
+backend so both the HTTP CORS policy and WebSocket origin check load the new
+allowlist:
+
+```bash
+docker compose up -d --force-recreate backend
+```
+
+The browser should use the same `https://…trycloudflare.com` URL Cloudflare
+printed. Quick Tunnel hostnames can change; update `ALLOWED_ORIGINS` and
+recreate the backend whenever the hostname changes. The origin remains
+allowlist-protected; do not set `*` or disable origin checks.
+
 ## Local development without Docker
 
 Backend:
@@ -363,8 +388,9 @@ API and WebSocket traffic to the backend on port 8000.
 - `key_material_exposed: false` records that no key bytes were serialized in
   the report. It does not claim that a seeded run is secret or that the wider
   system provides key confidentiality.
-- Phase 4 chat E2EE remains completely separate from the BB84 teaching run.
-  Phase 3 does not provide physical QKD, browser key ownership or chat keys.
+- The room-hosted Phase 3 teaching run remains separate from chat keys. The
+  endpoint-owned browser exchange can establish a hybrid epoch only after both
+  endpoints confirm it. Neither mode is physical QKD.
 
 Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [docs/API.md](docs/API.md),
@@ -387,6 +413,10 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
   `http://<creator-LAN-IP>:8080`. Web Crypto requires a secure context. Each
   participant must open their own `http://localhost:8080` page and let the
   joining backend relay over the LAN.
+- **Cloudflare tunnel says the browser was refused:** copy the current
+  `https://…trycloudflare.com` origin into `ALLOWED_ORIGINS` on the host, then
+  run `docker compose up -d --force-recreate backend`. Do not add a trailing
+  slash or use `*`.
 - **Encryption is waiting:** both participants must be connected and each must
   advertise a current browser key. Keep both tabs open and reconnect before
   retrying.
@@ -409,4 +439,4 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 The original report is referenced by the earlier handoff, but its
 `docs/Project_Reference_Secure_Chat.docx` file is absent from this project copy.
 The implemented boundaries are summarized in
-[docs/PHASE_STATUS.md](docs/PHASE_STATUS.md)
+[docs/PHASE_STATUS.md](docs/PHASE_STATUS.md).

@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   decryptText,
   computePairKeyId,
+  createBb84KeyConfirmation,
   deriveContext,
+  deriveBb84EpochKeys,
   E2EE_VERSION,
   encryptText,
   generateIdentity,
@@ -50,6 +52,43 @@ describe('Phase 4 browser encryption', () => {
     expect(bobPayload.ciphertext).not.toContain('private');
     await expect(decryptText(aliceContext, bobPayload, bobBinding))
       .resolves.toBe('A private reply');
+  });
+
+  it('derives matching BB84-combined directional keys and rejects a mismatched contribution', async () => {
+    const alice = await generateIdentity();
+    const bob = await generateIdentity();
+    const [aliceBase, bobBase] = await Promise.all([
+      deriveContext(alice, bob.publicKey, bob.publicKeyId, 'HYBRID-ROOM'),
+      deriveContext(bob, alice.publicKey, alice.publicKeyId, 'HYBRID-ROOM'),
+    ]);
+    const contribution = new Uint8Array(16).fill(0x5a);
+    const transcript = new Uint8Array(32).fill(0x21);
+    const [aliceEpoch, bobEpoch] = await Promise.all([
+      deriveBb84EpochKeys(alice, aliceBase, contribution, transcript),
+      deriveBb84EpochKeys(bob, bobBase, contribution, transcript),
+    ]);
+    const binding = {
+      roomId: 'HYBRID-ROOM', senderId: 'alice-client', senderName: 'Alice', clientMessageId: 'hybrid-1',
+    };
+    const payload = await encryptText(aliceEpoch.context, 'hybrid-key-check', binding);
+    await expect(decryptText(bobEpoch.context, payload, binding)).resolves.toBe('hybrid-key-check');
+
+    const aliceConfirm = await createBb84KeyConfirmation(aliceEpoch.confirmationKey, transcript, 'alice');
+    const bobVerifiesAlice = await createBb84KeyConfirmation(bobEpoch.confirmationKey, transcript, 'alice');
+    const bobConfirm = await createBb84KeyConfirmation(bobEpoch.confirmationKey, transcript, 'bob');
+    const aliceVerifiesBob = await createBb84KeyConfirmation(aliceEpoch.confirmationKey, transcript, 'bob');
+    expect(aliceConfirm).toEqual(bobVerifiesAlice);
+    expect(bobConfirm).toEqual(aliceVerifiesBob);
+    const aliceAck = await createBb84KeyConfirmation(aliceEpoch.confirmationKey, transcript, 'alice', 'ack');
+    const bobAckCheck = await createBb84KeyConfirmation(bobEpoch.confirmationKey, transcript, 'alice', 'ack');
+    expect(aliceAck).toEqual(bobAckCheck);
+
+    const mismatched = await deriveBb84EpochKeys(
+      bob, bobBase, new Uint8Array(16).fill(0x5b), transcript,
+    );
+    await expect(decryptText(mismatched.context, payload, binding)).rejects.toThrow();
+    const mismatchedConfirm = await createBb84KeyConfirmation(mismatched.confirmationKey, transcript, 'bob');
+    expect(mismatchedConfirm).not.toEqual(aliceVerifiesBob);
   });
 
   it('fails after bounded retries when the random source repeats an IV', async () => {

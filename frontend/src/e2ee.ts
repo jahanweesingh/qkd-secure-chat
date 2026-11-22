@@ -35,6 +35,17 @@ export interface E2eeContext {
   verificationCode: string;
 }
 
+export interface Bb84ControlKeys {
+  sendKey: CryptoKey;
+  receiveKey: CryptoKey;
+  runId: Uint8Array<ArrayBuffer>;
+}
+
+export interface Bb84EpochKeys {
+  context: E2eeContext;
+  confirmationKey: CryptoKey;
+}
+
 export interface EncryptedPayload {
   version: typeof E2EE_VERSION;
   keyId: string;
@@ -255,6 +266,73 @@ async function pairTranscriptHash(
   ));
 }
 
+/** Derive fresh, directional control keys for one BB84 run from browser ECDH. */
+export async function deriveBb84ControlKeys(
+  identity: E2eeIdentity,
+  peerPublicKey: string,
+  roomId: string,
+  pairKeyId: string,
+  runId: Uint8Array,
+): Promise<Bb84ControlKeys> {
+  if (runId.byteLength !== 16) throw new Error('BB84 run IDs must contain 16 random bytes.');
+  const peerBytes = base64UrlToBytes(peerPublicKey);
+  if (peerBytes.byteLength !== 65 || peerBytes[0] !== 0x04) {
+    throw new Error('The peer public key is not a P-256 uncompressed point.');
+  }
+  const peerId = bytesToBase64Url(await sha256(peerBytes));
+  if (!isValidPublicKeyEnvelope(peerPublicKey, peerId)) {
+    throw new Error('The peer public key is invalid.');
+  }
+  const expectedPairHash = await pairTranscriptHash(roomId, [identity.publicKeyBytes, peerBytes]);
+  if (!constantTimeEqual(expectedPairHash, base64UrlToBytes(pairKeyId))) {
+    throw new Error('The BB84 control key pair does not match the active room keys.');
+  }
+  const importedPeerKey = await webCrypto().subtle.importKey(
+    'raw', peerBytes, { name: 'ECDH', namedCurve: 'P-256' }, false, [],
+  );
+  const sharedSecret = new Uint8Array(await webCrypto().subtle.deriveBits(
+    { name: 'ECDH', public: importedPeerKey },
+    identity.keyPair.privateKey,
+    256,
+  ));
+  try {
+    const inputKey = await webCrypto().subtle.importKey('raw', sharedSecret, 'HKDF', false, ['deriveKey']);
+    const salt = await sha256(concatBytes(
+      encoder.encode('bb84-endpoint-v1/control-salt\0'),
+      base64UrlToBytes(pairKeyId),
+      runId,
+    ));
+    const derive = (direction: 'low-to-high' | 'high-to-low') => webCrypto().subtle.deriveKey(
+      {
+        name: 'HKDF',
+        hash: 'SHA-256',
+        salt,
+        info: encoder.encode(`bb84-endpoint-v1/control/${direction}`),
+      },
+      inputKey,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt'],
+    );
+    const [lowToHigh, highToLow] = await Promise.all([derive('low-to-high'), derive('high-to-low')]);
+    const localIsLow = compareBytes(identity.publicKeyBytes, peerBytes) < 0;
+    return {
+      sendKey: localIsLow ? lowToHigh : highToLow,
+      receiveKey: localIsLow ? highToLow : lowToHigh,
+      runId: new Uint8Array(runId),
+    };
+  } finally {
+    sharedSecret.fill(0);
+  }
+}
+
+function constantTimeEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  let difference = 0;
+  for (let index = 0; index < left.byteLength; index += 1) difference |= left[index] ^ right[index];
+  return difference === 0;
+}
+
 export async function computePairKeyId(
   roomId: string,
   leftPublicKey: string,
@@ -343,6 +421,67 @@ export async function deriveContext(
     receiveKey: localIsLow ? highToLowKey : lowToHighKey,
     verificationCode: verificationNumber.match(/.{1,4}/g)?.join(' ') ?? verificationNumber,
   };
+}
+
+/**
+ * Derive endpoint-only chat and confirmation keys from ECDH plus the locally
+ * agreed 128-bit BB84 simulation output. This is still ECDH-dependent: the
+ * software simulation is not a source of independent quantum security.
+ */
+export async function deriveBb84EpochKeys(
+  identity: E2eeIdentity,
+  base: E2eeContext,
+  contribution: Uint8Array,
+  preConfirmationTranscriptHash: Uint8Array,
+): Promise<Bb84EpochKeys> {
+  if (contribution.byteLength !== 16 || preConfirmationTranscriptHash.byteLength !== 32) {
+    throw new Error('BB84 contribution or transcript hash has an invalid length.');
+  }
+  const peerBytes = base64UrlToBytes(base.peerPublicKey);
+  const peer = await webCrypto().subtle.importKey(
+    'raw', peerBytes, { name: 'ECDH', namedCurve: 'P-256' }, false, [],
+  );
+  const sharedSecret = new Uint8Array(await webCrypto().subtle.deriveBits(
+    { name: 'ECDH', public: peer }, identity.keyPair.privateKey, 256,
+  ));
+  const label = encoder.encode('bb84-endpoint-v1/chat-ikm\0');
+  const lengthFields = new Uint8Array([0, sharedSecret.byteLength, 0, contribution.byteLength]);
+  const ikm = concatBytes(label, lengthFields.subarray(0, 2), sharedSecret, lengthFields.subarray(2), contribution);
+  sharedSecret.fill(0);
+  try {
+    const inputKey = await webCrypto().subtle.importKey('raw', ikm, 'HKDF', false, ['deriveKey']);
+    const derive = (info: string, algorithm: AesKeyGenParams | HmacKeyGenParams, usages: KeyUsage[]) =>
+      webCrypto().subtle.deriveKey({
+        name: 'HKDF', hash: 'SHA-256', salt: preConfirmationTranscriptHash,
+        info: encoder.encode(`bb84-endpoint-v1/${info}`),
+      }, inputKey, algorithm, false, usages);
+    const lowToHighKey = await derive('chat/low-to-high', { name: 'AES-GCM', length: 256 }, ['encrypt', 'decrypt']);
+    const highToLowKey = await derive('chat/high-to-low', { name: 'AES-GCM', length: 256 }, ['encrypt', 'decrypt']);
+    const confirmationKey = await derive('key-confirmation', { name: 'HMAC', hash: 'SHA-256', length: 256 }, ['sign', 'verify']);
+    const localIsLow = compareBytes(identity.publicKeyBytes, base64UrlToBytes(base.peerPublicKey)) < 0;
+    return {
+      context: {
+        ...base,
+        sendKey: localIsLow ? lowToHighKey : highToLowKey,
+        receiveKey: localIsLow ? highToLowKey : lowToHighKey,
+      },
+      confirmationKey,
+    };
+  } finally {
+    ikm.fill(0);
+  }
+}
+
+export async function createBb84KeyConfirmation(
+  key: CryptoKey,
+  preConfirmationTranscriptHash: Uint8Array,
+  role: 'alice' | 'bob',
+  purpose: 'confirm' | 'ack' = 'confirm',
+): Promise<Uint8Array<ArrayBuffer>> {
+  const roleLabel = encoder.encode(`bb84-endpoint-v1/key-confirmation/${purpose}/${role}\0`);
+  return new Uint8Array(await webCrypto().subtle.sign(
+    'HMAC', key, concatBytes(roleLabel, preConfirmationTranscriptHash),
+  ));
 }
 
 function additionalData(binding: MessageBinding): Uint8Array<ArrayBuffer> {

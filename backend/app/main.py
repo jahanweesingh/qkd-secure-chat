@@ -36,6 +36,7 @@ from .repository import (
 from .relay import RELAY_HEADER, PeerUnavailable, proxy_room_websocket
 from .room_codes import InvalidInvitationRoomCode, decode_room_creator_ip
 from .schemas import (
+    BB84ControlCommand,
     BB84StartCommand,
     E2EEHelloCommand,
     EncryptedMessageCommand,
@@ -386,6 +387,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if isinstance(event_type, str) and event_type in {
                     "e2ee_hello",
                     "encrypted_message",
+                    "bb84_control",
                 }:
                     # Keep a key rotation from interleaving between envelope
                     # validation and persistence/broadcast for the same room.
@@ -607,6 +609,66 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                     "type": "encrypted_message",
                                     "message": message.as_dict(),
                                 },
+                            )
+                    elif event_type == "bb84_control":
+                        command = BB84ControlCommand.model_validate(payload)
+                        if command.room_id != room_id:
+                            await manager.send_to(
+                                room_id,
+                                client_id,
+                                error_event("bb84_control_invalid", "Control packet room does not match this connection"),
+                            )
+                            continue
+                        advertisements = await manager.e2ee_key_pair(room_id)
+                        if advertisements is None:
+                            await manager.send_to(
+                                room_id,
+                                client_id,
+                                error_event("e2ee_not_ready", "Both current browser keys are required"),
+                            )
+                            continue
+                        sender_advertisement = next(
+                            (item for item in advertisements if item.client_id == client_id),
+                            None,
+                        )
+                        recipient_advertisement = next(
+                            (item for item in advertisements if item.client_id != client_id),
+                            None,
+                        )
+                        if sender_advertisement is None or recipient_advertisement is None:
+                            await manager.send_to(
+                                room_id,
+                                client_id,
+                                error_event("e2ee_not_ready", "Current browser keys are unavailable"),
+                            )
+                            continue
+                        expected_pair_id = pair_key_id(
+                            room_id,
+                            [item.public_key_bytes for item in advertisements],
+                        )
+                        if not (
+                            hmac.compare_digest(command.pair_key_id, expected_pair_id)
+                            and hmac.compare_digest(command.sender_key_id, sender_advertisement.public_key_id)
+                            and hmac.compare_digest(command.recipient_key_id, recipient_advertisement.public_key_id)
+                        ):
+                            await manager.send_to(
+                                room_id,
+                                client_id,
+                                error_event("bb84_control_invalid", "Control packet does not match the current browser-key pair"),
+                            )
+                            continue
+                        # The backend validates routing only. The encrypted
+                        # payload is neither opened, persisted, nor logged.
+                        forwarded = await manager.send_to(
+                            room_id,
+                            recipient_advertisement.client_id,
+                            command.model_dump(mode="json"),
+                        )
+                        if not forwarded:
+                            await manager.send_to(
+                                room_id,
+                                client_id,
+                                error_event("peer_unreachable", "The peer browser could not receive the control packet"),
                             )
                     elif event_type == "typing":
                         command = TypingCommand.model_validate(payload)

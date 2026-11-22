@@ -45,9 +45,9 @@ their own private keys. Keep the creator Mac awake throughout the presentation.
 
 | Time | Show | Explain |
 | --- | --- | --- |
-| 0:00–1:00 | Both chat windows and matching safety codes | The browsers establish keys; people verify the current device keys by comparing the code. |
-| 1:00–2:30 | **Live security view** and one message in each direction | These are real observations from this browser, not an animation of guessed delivery. |
-| 2:30–4:00 | **BB84 lab**, then **Run without Eve** and **Run with Eve** | A classical simulation illustrates how measurement interference can introduce errors. |
+| 0:00–1:00 | Both chat windows and matching safety codes | The browsers establish ECDH keys; people verify the current device keys by comparing the code. |
+| 1:00–2:30 | **BB84 lab → Start BB84 key exchange**, then one message in each direction | Both browsers independently run the protocol, confirm a matching contribution, activate a hybrid epoch, and use it for chat messages. |
+| 2:30–4:00 | **Start BB84 Experiment**, then compare with and without Eve | The separate room-hosted teaching simulation illustrates how measurement interference can introduce errors. |
 | 4:00–6:00 | A short, filtered Wireshark capture or the DevTools fallback | The network carries encrypted message contents and visible routing metadata. |
 | 6:00–7:00 | An encrypted image and the limitations | Files are encrypted locally too; the prototype has clear security boundaries. |
 
@@ -263,23 +263,21 @@ See [ENCRYPTED_MEDIA.md](ENCRYPTED_MEDIA.md) for the exact lifecycle and limits.
 
 ## A 30-second explanation
 
-> “Our project combines encrypted communication with a separate BB84 teaching
-> experiment. Real chat encryption happens inside the browsers using ECDH,
-> HKDF and AES-GCM. Our live view shows actual local encryption and decryption
-> events, and the network capture shows encrypted contents with visible
-> metadata. The BB84 lab illustrates how intercept-and-resend can introduce
-> errors in a simulated exchange. We reject that experiment when its sample
-> exceeds the chosen limit. This is a classical software demonstration, not
-> physical quantum key distribution or quantum-secure chat.”
+> “Our chat supports ECDH-only mode and an optional BB84 + ECDH hybrid mode.
+> Both browsers independently simulate BB84; after mutual key confirmation,
+> ECDH plus the matching contribution goes through HKDF-SHA-256 to separate
+> AES-GCM message keys. The room-hosted BB84 experiment is a separate teaching
+> simulation. Neither is physical quantum key distribution, and the hybrid
+> mode provides no security independent of ECDH.”
 
 ## Likely panel questions
 
 | Question | Accurate answer |
 | --- | --- |
-| Is BB84 generating the AES chat keys? | No. Chat keys come from browser ECDH and HKDF. The separate BB84 simulation's output is discarded. |
+| Is BB84 generating the AES chat keys? | In confirmed hybrid mode, each browser derives a BB84 contribution and combines it locally with ECDH through HKDF-SHA-256. The room-hosted teaching simulation's output is discarded. This is not physical QKD and gives no security independent of ECDH. |
 | Does starting Wireshark make Eve appear? | No. Passive packet capture does not disturb this classical network or drive the BB84 simulation. Eve is an explicit experiment setting. |
 | Can the backend read chat content? | In the intended honest-relay flow, it receives encrypted contents and public metadata, not private chat keys. Before safety-code verification, an active relay can substitute public keys. Compromised browsers or delivered application code can expose plaintext. |
-| Does the backend know the BB84 bits? | Yes, temporarily: it runs both sides of the classical simulation. Seeded examples are also reconstructible from public inputs. This is why these simulated values do not become chat keys. |
+| Does the backend know the BB84 bits? | It knows the temporary bits in the room-hosted teaching simulation. In endpoint-owned mode, the backend only relays encrypted control envelopes; it does not receive raw contributions or chat keys. The software simulation still relies on ECDH and does not provide quantum security. |
 | What does “verified” prove? | Someone compared the current full safety code through a trusted channel on that browser. It does not prove a person's legal identity or that a device is uncompromised. |
 | Is low error proof that Eve is absent? | No. It means the measured sample was within the configured limit. Noise and finite sampling also matter. |
 | Does a server acknowledgement mean the recipient decrypted? | No. It confirms server acceptance. Successful decryption is observed locally on the receiving browser. |

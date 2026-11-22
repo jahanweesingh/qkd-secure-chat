@@ -4,6 +4,7 @@ import type { ChatMessage, ConnectionInfo, EncryptionInfo } from './types';
 import type { SecurityTraceEvent } from './securityTrace';
 import { LiveSecurityView } from './LiveSecurityView';
 import { SimpleEncryptionDemo } from './SimpleEncryptionDemo';
+import type { EndpointBb84Progress } from './bb84ChatSession';
 import './presentation-dialog.css';
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
   events: SecurityTraceEvent[];
   connection: ConnectionInfo;
   encryption: EncryptionInfo;
+  endpointBb84: EndpointBb84Progress;
   messages: ChatMessage[];
   currentClientId: string;
   onSend: (text: string) => boolean;

@@ -1,5 +1,9 @@
 # Taste UI refinement
 
+> Historical report from 13 November 2026: it describes the pre-hybrid chat
+> state. For current BB84 + ECDH chat behavior, see
+> [BB84_AES_INTEGRATION_PLAN.md](BB84_AES_INTEGRATION_PLAN.md).
+
 The user explicitly chose **Warm editorial café**. The refinement changes the
 layout of the application as well as its colors: cream canvas, ivory paper
 surfaces, espresso accents and Georgia display headings. Controls and conversation

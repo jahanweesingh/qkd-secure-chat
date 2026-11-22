@@ -98,6 +98,7 @@ export type EncryptionState =
 export interface EncryptionInfo {
   state: EncryptionState;
   canSend: boolean;
+  activeKeyMode: 'ecdh' | 'bb84_hybrid' | null;
   verificationCode: string | null;
   verifiedAt: string | null;
   peerName: string | null;

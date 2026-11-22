@@ -74,8 +74,11 @@ stream of every internal server instruction or a network packet capture.
 4. Switch to **Live chat**, send **hi** to the other laptop, and inspect the
    actual envelope and backend acknowledgement. Explain why this mode keeps
    its real chat keys protected.
-5. Open **BB84 lab** separately for the Eve/no-Eve comparison. BB84 is still
-   a classical simulation and does not contribute to either mode's AES keys.
+5. Open **BB84 lab**. Use **Start BB84 key exchange** to establish the
+   endpoint-owned hybrid chat mode after both browsers confirm the key. Use
+   **Start BB84 Experiment** for the separate Eve/no-Eve teaching comparison.
+   Both BB84 activities are software simulations, not physical QKD; the hybrid
+   mode provides no security independent of ECDH.
 
 The chat has one demo entry, one encryption badge and a separate connection
 badge. Repeated explanations have moved into disclosures. Necessary failures,

@@ -54,8 +54,11 @@ record, which counts toward quota. Oversized or full-room uploads fail clearly.
 This first implementation buffers at most one bounded file per upload and does
 not implement resumable streaming, large movies, file compression or transcoding.
 
-The BB84 lab remains a classical software simulation, separate from both file
-and text encryption. No physical QKD or quantum-security claim is made.
+The room-hosted BB84 teaching report remains separate from file and text keys.
+The endpoint-owned exchange may activate the hybrid chat key that protects the
+encrypted file descriptor; the file itself still uses its own random AES-GCM
+key. Both BB84 activities are software simulations, not physical QKD, and make
+no quantum-security claim.
 
 ## Interface ownership
 
@@ -121,9 +124,10 @@ cryptographic audit is claimed. No new production dependency was added.
 4. Expand **How protection works** to explain browser encryption, opaque server
    relay and recipient decryption. The explanation is conceptual, not a fake live
    packet animation. File content has its own fresh key protected by the chat.
-5. Open **BB84 lab** for the separate simulated experiment. Use1024 bits, seed7,
-   zero noise/interception, then repeat with Eve at100%. Explain that this
-   experiment does not supply the actual chat or file keys.
+5. Open **BB84 lab**. Use **Start BB84 key exchange** to show the confirmed
+   hybrid chat mode, then use **Start BB84 Experiment** for the separate
+   1024-bit Eve/no-Eve comparison. The room-hosted result does not supply chat
+   keys; the file uses a separate random key protected in the chat envelope.
 
 ## Modified files
 

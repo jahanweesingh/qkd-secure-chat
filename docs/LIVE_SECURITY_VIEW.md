@@ -58,8 +58,10 @@ basis. The controls step through recorded rows; the backend still returns its
 complete result in one event and does not stream per-transmission progress.
 
 The teaching seed is public and deterministic. These runs demonstrate behavior,
-not secret generation for production. BB84 remains independent of chat ECDH/HKDF
-and AES-GCM. A low sample error does not establish the absence of an observer.
+not secret generation for production. The room-hosted teaching result is
+independent of chat ECDH/HKDF and AES-GCM; endpoint-owned BB84 contributes to
+chat only after matching confirmation. A low sample error does not establish
+the absence of an observer.
 A passive packet capture is not BB84 intercept-and-resend and is not detected by
 this lab. See [the panel runbook](PANEL_DEMO.md) for the actual demonstrations.
 

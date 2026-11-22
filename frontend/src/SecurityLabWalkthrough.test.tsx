@@ -1,9 +1,10 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import type { Bb84Result, Bb84RunState } from './bb84';
+import type { Bb84Result } from './bb84';
+import { EMPTY_ENDPOINT_BB84_PROGRESS, type EndpointBb84Progress } from './bb84ChatSession';
 import type { EncryptionInfo, EncryptionState } from './types';
-import { ChatProtectionSummary, SecurityLabWalkthrough } from './SecurityLabWalkthrough';
+import { ChatKeyModeSummary, ChatProtectionSummary, SecurityLabWalkthrough } from './SecurityLabWalkthrough';
 
 const result: Bb84Result = {
   sessionId: 'test-run', startedBy: 'alice', createdAt: '2026-11-12T12:00:00Z',
@@ -26,7 +27,7 @@ const result: Bb84Result = {
 };
 
 function encryption(state: EncryptionState): EncryptionInfo {
-  return { state, canSend: state.startsWith('encrypted_'), verificationCode: null, verifiedAt: null,
+  return { state, canSend: state.startsWith('encrypted_'), activeKeyMode: state.startsWith('encrypted_') ? 'ecdh' : null, verificationCode: null, verifiedAt: null,
     peerName: null, localKeyId: null, peerKeyId: null, sessionKeyId: null, keyStorage: null, error: null };
 }
 
@@ -34,36 +35,61 @@ function metric(label: string, value: string) {
   expect(screen.getByText(label, { selector: 'dt' }).nextElementSibling).toHaveTextContent(value);
 }
 
-describe('honest lab and chat status', () => {
-  it.each<[EncryptionState, string]>([
-    ['idle', 'Setting up'], ['setting_up', 'Setting up'], ['waiting_for_peer', 'Setting up'],
-    ['encrypted_unverified', 'Active'], ['encrypted_verified', 'Active'],
-    ['key_changed', 'Paused — key changed'], ['failed', 'Failed'],
-  ])('uses local %s evidence even after a successful experiment', (state, label) => {
-    render(<ChatProtectionSummary encryption={encryption(state)} connection={{ state: 'connected', attempt: 0, nextRetrySeconds: null, error: null }} state="complete" result={result} />);
-    expect(screen.getByText(label, { selector: 'strong' })).toBeVisible();
-    expect(screen.getByText('Not connected')).toBeVisible();
-    expect(screen.queryByText(/Active in demo mode/)).not.toBeInTheDocument();
-    if (state !== 'encrypted_verified') expect(screen.queryByText(/Safety code: verified on this browser/)).not.toBeInTheDocument();
+function endpointProgress(status: EndpointBb84Progress['status'] = 'idle'): EndpointBb84Progress {
+  return { ...EMPTY_ENDPOINT_BB84_PROGRESS, status };
+}
+
+describe('compact chat security status', () => {
+  it('shows the active chat mode and keeps detailed derivation out of the compact card', () => {
+    render(<ChatProtectionSummary encryption={encryption('encrypted_unverified')} endpointBb84={endpointProgress()} connection={{ state: 'connected', attempt: 0, nextRetrySeconds: null, error: null }} />);
+    const summary = screen.getByRole('status', { name: 'Current chat security' });
+    expect(summary).toHaveTextContent('ECDH-only');
+    expect(summary).toHaveTextContent(/BB84 contribution\s+Not started/);
+    expect(summary).toHaveTextContent(/Mutual key confirmation\s+Not reached/);
+    expect(summary).toHaveTextContent('AES-256-GCM');
+    expect(summary).not.toHaveTextContent('HKDF-SHA-256');
   });
 
-  it.each<[Bb84RunState, string]>([['idle', 'Not started'], ['running', 'Running'], ['error', 'Result unavailable']])('shows %s without making up a result', (state, label) => {
-    render(<ChatProtectionSummary encryption={encryption('waiting_for_peer')} connection={{ state: 'connected', attempt: 0, nextRetrySeconds: null, error: null }} state={state} result={null} />);
-    expect(screen.getByText(label)).toBeVisible();
-    expect(screen.queryByText('Accepted')).not.toBeInTheDocument();
+  it('keeps transport state separate from active encryption mode', () => {
+    render(<ChatProtectionSummary encryption={encryption('encrypted_verified')} endpointBb84={endpointProgress()} connection={{ state: 'offline', attempt: 0, nextRetrySeconds: null, error: null }} />);
+    expect(screen.getByRole('status', { name: 'Current chat security' })).toHaveTextContent('ECDH-only');
+    expect(screen.getByText(/Connection offline/)).toBeVisible();
   });
 
-  it('keeps transport loss separate from locally active encryption', () => {
-    render(<ChatProtectionSummary encryption={encryption('encrypted_verified')} connection={{ state: 'offline', attempt: 0, nextRetrySeconds: null, error: null }} state="complete" result={result} />);
-    expect(screen.getByText('Active')).toBeVisible();
-    expect(screen.getByText(/Connection: offline/)).toHaveTextContent('Message delivery is unavailable');
+  it('shows hybrid only after activation and marks the contribution inactive after fallback', () => {
+    const hybrid = { ...encryption('encrypted_unverified'), activeKeyMode: 'bb84_hybrid' as const };
+    const { rerender } = render(<ChatKeyModeSummary encryption={hybrid} endpointBb84={endpointProgress('complete')} />);
+    let summary = screen.getByRole('status', { name: 'Current chat security' });
+    expect(summary).toHaveTextContent('BB84 + ECDH Hybrid');
+    expect(summary).toHaveTextContent(/BB84 contribution\s+Confirmed/);
+    expect(summary).toHaveTextContent(/Mutual key confirmation\s+Confirmed/);
+    expect(summary).toHaveTextContent('AES-256-GCM');
+    expect(summary).not.toHaveTextContent('HKDF-SHA-256');
+
+    rerender(<ChatKeyModeSummary encryption={encryption('encrypted_unverified')} endpointBb84={endpointProgress('complete')} />);
+    summary = screen.getByRole('status', { name: 'Current chat security' });
+    expect(summary).toHaveTextContent('ECDH-only');
+    expect(summary).toHaveTextContent(/BB84 contribution\s+Confirmed · inactive in current chat mode/);
+    expect(summary).toHaveTextContent(/Mutual key confirmation\s+Confirmed/);
   });
 
-  it('does not treat sample acceptance as a completed key', () => {
-    const failed = { ...result, postProcessing: { ...result.postProcessing, status: 'failed' as const, reason: 'insufficient_entropy' as const } };
-    render(<ChatProtectionSummary encryption={encryption('encrypted_unverified')} connection={{ state: 'connected', attempt: 0, nextRetrySeconds: null, error: null }} state="complete" result={failed} />);
-    expect(screen.getByText('Rejected')).toBeVisible();
-    expect(screen.getByText('Active')).toBeVisible();
+  it('shows a running or failed contribution without claiming hybrid mode', () => {
+    const { rerender } = render(<ChatKeyModeSummary encryption={encryption('encrypted_unverified')} endpointBb84={endpointProgress('reconciling')} />);
+    let summary = screen.getByRole('status', { name: 'Current chat security' });
+    expect(summary).toHaveTextContent('ECDH-only');
+    expect(summary).toHaveTextContent(/BB84 contribution\s+In progress/);
+    expect(summary).toHaveTextContent(/Mutual key confirmation\s+Not reached/);
+    rerender(<ChatKeyModeSummary encryption={encryption('encrypted_unverified')} endpointBb84={endpointProgress('failed')} />);
+    summary = screen.getByRole('status', { name: 'Current chat security' });
+    expect(summary).toHaveTextContent(/BB84 contribution\s+Failed/);
+    expect(summary).toHaveTextContent('ECDH-only');
+  });
+
+  it('shows pending confirmation and a failed closed epoch during and after failed BB84', () => {
+    const { rerender } = render(<ChatKeyModeSummary encryption={encryption('encrypted_unverified')} endpointBb84={endpointProgress('key_confirmation')} />);
+    expect(screen.getByRole('status')).toHaveTextContent(/Mutual key confirmation\s+Pending/);
+    rerender(<ChatKeyModeSummary encryption={encryption('encrypted_unverified')} endpointBb84={endpointProgress('failed')} />);
+    expect(screen.getByRole('status')).toHaveTextContent(/Mutual key confirmation\s+Not confirmed/);
   });
 });
 

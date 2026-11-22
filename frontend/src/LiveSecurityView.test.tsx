@@ -3,10 +3,11 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { LiveSecurityView, type LiveSecurityViewProps } from './LiveSecurityView';
 import type { SecurityTraceEvent, SecurityTraceKind } from './securityTrace';
+import { EMPTY_ENDPOINT_BB84_PROGRESS } from './bb84ChatSession';
 import type { EncryptionInfo, EncryptionState } from './types';
 
 const encrypted: EncryptionInfo = {
-  state: 'encrypted_unverified', canSend: true, verificationCode: '1234 5678 9012', verifiedAt: null,
+  state: 'encrypted_unverified', canSend: true, activeKeyMode: 'ecdh', verificationCode: '1234 5678 9012', verifiedAt: null,
   peerName: 'Bob', localKeyId: 'do-not-render-local-id', peerKeyId: 'do-not-render-peer-id',
   sessionKeyId: 'do-not-render-session-id', keyStorage: 'device', error: null,
 };
@@ -18,7 +19,7 @@ function event(kind: SecurityTraceKind, overrides: Partial<SecurityTraceEvent> =
 
 function props(events: SecurityTraceEvent[] = []): LiveSecurityViewProps {
   return { events, connection: { state: 'connected', attempt: 0, nextRetrySeconds: null, error: null },
-    encryption: encrypted, onClear: vi.fn(), onOpenLab: vi.fn(), onOpenSecurity: vi.fn() };
+    encryption: encrypted, endpointBb84: EMPTY_ENDPOINT_BB84_PROGRESS, onClear: vi.fn(), onOpenLab: vi.fn(), onOpenSecurity: vi.fn() };
 }
 
 describe('live encryption presentation', () => {
@@ -217,7 +218,7 @@ describe('live encryption presentation', () => {
     const user = userEvent.setup();
     render(<LiveSecurityView {...props()} />);
     expect(screen.getByText(/This screen observes the app. It is not a network packet capture/)).toBeVisible();
-    expect(screen.getByText(/BB84 output is not connected to these chat keys/)).toBeVisible();
+    expect(screen.getByText(/room-hosted teaching report does not set chat keys/)).toBeVisible();
     await user.click(screen.getByText('See technical details'));
     expect(screen.getByText(/History replay is excluded from this live view/)).toBeVisible();
     expect(screen.getByText(/these byte counts are not file-transfer progress/)).toBeVisible();

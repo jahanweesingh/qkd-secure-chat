@@ -63,6 +63,27 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('observations at real chat boundaries', () => {
+  it('starts endpoint BB84 from the chat hook and sends only protected control envelopes', async () => {
+    const { result, socket } = await connectRoom();
+    act(() => {
+      expect(result.current.startEndpointBb84({
+        qubitCount: 512,
+        noiseProbability: 0,
+        interceptProbability: 0,
+        sampleRatio: 0.25,
+        qberThreshold: 0.11,
+        seed: null,
+      })).toBe(true);
+    });
+    await waitFor(() => expect(
+      socket.sent.map((value) => JSON.parse(value)).filter((value) => value.type === 'bb84_control'),
+    ).toHaveLength(17));
+    const controls = socket.sent.map((value) => JSON.parse(value)).filter((value) => value.type === 'bb84_control');
+    expect(controls[0]).toMatchObject({ type: 'bb84_control', sequence: 0, version: 'bb84-endpoint-v1' });
+    expect(controls.slice(1).every((value) => typeof value.ciphertext === 'string' && !('bits' in value))).toBe(true);
+    expect(result.current.endpointBb84).toMatchObject({ role: 'alice', status: 'exchanging', percent: 60 });
+  });
+
   it('records setup, actual encryption and relay acknowledgement without inventing peer decryption', async () => {
     const { result, socket } = await connectRoom();
     expect(result.current.securityTrace.map((event) => event.kind)).toEqual([

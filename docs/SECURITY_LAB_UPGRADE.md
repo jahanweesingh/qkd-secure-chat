@@ -2,6 +2,10 @@
 
 Delivered: 12 November 2026.
 
+> Historical report: at delivery, endpoint-owned BB84 had not yet been
+> implemented. The current implementation status is in
+> [BB84_AES_INTEGRATION_PLAN.md](BB84_AES_INTEGRATION_PLAN.md).
+
 The existing chat is preserved. The lab is easier to explain and now reports
 real browser encryption state. **BB84 is still not connected to AES key
 derivation.** A safe endpoint-owned integration needs a new protocol; the
