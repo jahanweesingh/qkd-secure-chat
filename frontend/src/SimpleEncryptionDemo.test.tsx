@@ -23,7 +23,7 @@ const example: LearningEncryptionResult = {
 function props(overrides: Partial<SimpleEncryptionDemoProps> = {}): SimpleEncryptionDemoProps {
   return { messages: [], currentClientId: 'alice', events: [],
     connection: { state: 'connected', attempt: 0, error: null, nextRetrySeconds: null },
-    encryption: { state: 'encrypted_unverified', canSend: true, verificationCode: '1234 5678 9012',
+    encryption: { state: 'encrypted_unverified', canSend: true, activeKeyMode: 'ecdh', verificationCode: '1234 5678 9012',
       verifiedAt: null, peerName: 'Bob', localKeyId: 'LOCAL-ID', peerKeyId: 'PEER-ID',
       sessionKeyId: 'PAIR-ID', keyStorage: 'device', error: null },
     onSend: vi.fn(() => true), ...overrides };

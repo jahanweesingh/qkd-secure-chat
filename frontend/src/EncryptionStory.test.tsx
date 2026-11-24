@@ -23,7 +23,7 @@ const result: Bb84Result = {
 };
 
 function encryption(state: EncryptionState = 'encrypted_unverified'): EncryptionInfo {
-  return { state, canSend: state.startsWith('encrypted_'), verificationCode: '1234 5678 9012', verifiedAt: null,
+  return { state, canSend: state.startsWith('encrypted_'), activeKeyMode: state.startsWith('encrypted_') ? 'ecdh' : null, verificationCode: '1234 5678 9012', verifiedAt: null,
     localKeyId: 'local-key-identifier', peerKeyId: 'peer-key-identifier', sessionKeyId: 'session-key-identifier',
     keyStorage: 'device', peerName: 'Bob', error: null };
 }

@@ -454,6 +454,38 @@ def test_websocket_origin_policy(client: TestClient, settings: Settings) -> None
             receive_initial(allowed_by_wildcard)
 
 
+def test_websocket_allows_exact_https_cloudflare_tunnel_origin(
+    settings: Settings,
+) -> None:
+    tunnel_origin = "https://bb84-demo.trycloudflare.com"
+    tunnel_settings = Settings(
+        database_path=settings.database_path + "-cloudflare-ws",
+        allowed_origins=("http://localhost:5173", tunnel_origin),
+        default_history_limit=settings.default_history_limit,
+        max_history_limit=settings.max_history_limit,
+        max_message_length=settings.max_message_length,
+        max_websocket_event_bytes=settings.max_websocket_event_bytes,
+        app_port=settings.app_port,
+    )
+    with TestClient(create_app(tunnel_settings)) as tunnel_client:
+        with tunnel_client.websocket_connect(
+            socket_url(), headers={"origin": tunnel_origin}
+        ) as allowed:
+            receive_initial(allowed)
+
+        with tunnel_client.websocket_connect(
+            socket_url(), headers={"origin": "https://other.trycloudflare.com"}
+        ) as rejected:
+            assert rejected.receive_json() == {
+                "type": "error",
+                "code": "origin_not_allowed",
+                "message": "The WebSocket Origin is not allowed",
+            }
+            with pytest.raises(WebSocketDisconnect) as closed:
+                rejected.receive_json()
+            assert closed.value.code == 4403
+
+
 def test_invalid_identity_returns_structured_error(client: TestClient) -> None:
     with client.websocket_connect(socket_url(room_id="bad.room")) as socket:
         error = socket.receive_json()

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { PresentationDialog } from './PresentationDialog';
+import { EMPTY_ENDPOINT_BB84_PROGRESS } from './bb84ChatSession';
 import type { EncryptionInfo } from './types';
 
 const originalShow = HTMLDialogElement.prototype.showModal;
@@ -14,9 +15,10 @@ afterAll(() => {
   HTMLDialogElement.prototype.close = originalClose;
 });
 const encryption: EncryptionInfo = { state: 'waiting_for_peer', canSend: false,
+  activeKeyMode: null,
   verificationCode: null, verifiedAt: null, peerName: null, localKeyId: null,
   peerKeyId: null, sessionKeyId: null, keyStorage: null, error: null };
-const props = { open: true, events: [], connection: { state: 'connected' as const, attempt: 0, nextRetrySeconds: null, error: null }, encryption,
+const props = { open: true, events: [], connection: { state: 'connected' as const, attempt: 0, nextRetrySeconds: null, error: null }, encryption, endpointBb84: EMPTY_ENDPOINT_BB84_PROGRESS,
   messages: [], currentClientId: 'alice', onSend: vi.fn(() => true),
   onClear: vi.fn(), onClose: vi.fn(), onOpenLab: vi.fn(), onOpenSecurity: vi.fn() };
 

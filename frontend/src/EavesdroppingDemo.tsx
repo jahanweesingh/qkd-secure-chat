@@ -75,7 +75,7 @@ export function EavesdroppingDemo({ result, state, connected, onRun }: Props) {
         <div className="eve-demo__row-controls"><button type="button" aria-label="Previous recorded transmission" disabled={rowIndex === 0} onClick={() => setRowIndex(index => index - 1)}><ArrowLeft size={16} aria-hidden="true" />Previous</button><span>{rowIndex + 1} / {result.trace.length} disclosed trace rows</span><button type="button" aria-label="Next recorded transmission" disabled={rowIndex >= result.trace.length - 1} onClick={() => setRowIndex(index => index + 1)}>Next<ArrowRight size={16} aria-hidden="true" /></button></div>
         <small>Review of the latest completed run, not live photons. Secret bit values and Eve’s private measurement choices are not shown.</small>
       </div>}
-      <aside className="eve-demo__boundary"><strong>Listening to network packets is a different demonstration.</strong> Wireshark observes the already encrypted chat traffic. This BB84 model does not detect packet sniffers, and its results never change the chat keys. A low error rate does not prove Eve is absent.</aside>
+      <aside className="eve-demo__boundary"><strong>Listening to network packets is a different demonstration.</strong> Wireshark observes the already encrypted chat traffic. This room-hosted BB84 teaching simulation does not detect packet sniffers or set chat keys; endpoint-owned BB84 can activate the hybrid chat key after mutual confirmation. A low error rate does not prove Eve is absent.</aside>
     </section>
   );
 }

@@ -11,6 +11,7 @@ from .e2ee import (
     E2EE_MESSAGE_ALGORITHM,
     E2EE_PUBLIC_KEY_ALGORITHM,
     E2EE_VERSION,
+    decode_base64url,
     public_key_id,
     validate_ciphertext,
     validate_iv,
@@ -104,6 +105,35 @@ class EncryptedMessageCommand(BaseModel):
         validate_key_id(self.key_id)
         validate_iv(self.iv)
         validate_ciphertext(self.ciphertext)
+        return self
+
+
+class BB84ControlCommand(BaseModel):
+    """Opaque endpoint-encrypted BB84 control packet; never persisted."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    type: Literal["bb84_control"]
+    version: Literal["bb84-endpoint-v1"]
+    room_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+    pair_key_id: str
+    run_id: str = Field(min_length=22, max_length=22, pattern=r"^[A-Za-z0-9_-]{22}$")
+    sender_key_id: str
+    recipient_key_id: str
+    sequence: int = Field(ge=0, le=65_535)
+    nonce: str = Field(min_length=16, max_length=16, pattern=r"^[A-Za-z0-9_-]{16}$")
+    ciphertext: str = Field(min_length=22, max_length=3_500, pattern=r"^[A-Za-z0-9_-]+$")
+
+    @model_validator(mode="after")
+    def _validate_opaque_control_envelope(self) -> "BB84ControlCommand":
+        for name in ("pair_key_id", "sender_key_id", "recipient_key_id"):
+            validate_key_id(getattr(self, name), field_name=name)
+        if len(decode_base64url(self.run_id, field_name="run_id")) != 16:
+            raise ValueError("run_id must decode to 16 bytes")
+        if len(decode_base64url(self.nonce, field_name="nonce")) != 12:
+            raise ValueError("nonce must decode to 12 bytes")
+        if len(decode_base64url(self.ciphertext, field_name="ciphertext")) < 16:
+            raise ValueError("ciphertext must include an AES-GCM tag")
         return self
 
 

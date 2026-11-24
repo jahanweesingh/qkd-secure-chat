@@ -1,54 +1,66 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, Check, Eye, Lock, UserRound } from 'lucide-react';
-import type { Bb84Basis, Bb84Result, Bb84RunState } from './bb84';
+import type { Bb84Basis, Bb84Result } from './bb84';
+import type { EndpointBb84Progress } from './bb84ChatSession';
 import type { ConnectionInfo, EncryptionInfo } from './types';
+import { getEndpointBb84RuntimeStatus } from './bb84RuntimeStatus';
 import './security-lab.css';
 
 const percent = (value: number) => `${(value * 100).toFixed(2)}%`;
 const reviewLabels = ['Prepare information', 'Send information', 'Measure results', 'Keep matching choices', 'Check for interference', 'Prepare the key', 'Read the result'];
 
-export function ChatProtectionSummary({ encryption, connection, state, result }: {
+export function EndpointBb84RuntimeSummary({ encryption, endpointBb84 }: {
   encryption: EncryptionInfo;
+  endpointBb84: EndpointBb84Progress;
+}) {
+  const status = getEndpointBb84RuntimeStatus(encryption, endpointBb84);
+  return <dl className="lab-endpoint-runtime" role="region" aria-label="Endpoint BB84 and chat key status">
+    <div><dt>BB84 session</dt><dd>{status.session}{endpointBb84.status !== 'idle' && endpointBb84.role ? ` · ${endpointBb84.role === 'alice' ? 'Alice' : 'Bob'} · ${endpointBb84.status.replaceAll('_', ' ')}` : ''}</dd></div>
+    <div><dt>Chat encryption</dt><dd>{status.chatMode}</dd></div>
+    <div><dt>BB84 key contribution</dt><dd>{status.contribution}</dd></div>
+    <div><dt>Contribution in chat encryption</dt><dd>{status.contributionInChat}</dd></div>
+    <div><dt>Basis reconciliation</dt><dd>{status.reconciliation}</dd></div>
+    <div><dt>Privacy amplification</dt><dd>{status.privacyAmplification}</dd></div>
+    <div><dt>Mutual key confirmation</dt><dd>{status.keyConfirmation}</dd></div>
+    <div><dt>Active hybrid epoch</dt><dd>{status.hybridEpoch}</dd></div>
+  </dl>;
+}
+
+export function ChatKeyModeSummary({ encryption, endpointBb84 }: {
+  encryption: EncryptionInfo;
+  endpointBb84: EndpointBb84Progress;
+}) {
+  const status = getEndpointBb84RuntimeStatus(encryption, endpointBb84);
+  const mode = status.chatMode === 'BB84-ECDH hybrid active' ? 'BB84 + ECDH Hybrid'
+    : status.chatMode === 'ECDH-only' ? 'ECDH-only' : 'No active chat key';
+  const contribution = status.contribution === 'Confirmed' && status.contributionInChat !== 'Active in hybrid epoch'
+    ? 'Confirmed · inactive in current chat mode'
+    : status.contribution;
+  return <section className="chat-security-summary" aria-label="Current chat security" role="status">
+    <div className="chat-security-summary__mode">
+      <span>Current encryption mode</span>
+      <strong>{mode}</strong>
+    </div>
+    <div className="chat-security-summary__indicators">
+      <span>BB84 contribution <strong>{contribution}</strong></span>
+      <span>Mutual key confirmation <strong>{status.keyConfirmation}</strong></span>
+    </div>
+    <p>Message encryption <strong>AES-256-GCM</strong></p>
+  </section>;
+}
+
+export function ChatProtectionSummary({ encryption, endpointBb84, connection }: {
+  encryption: EncryptionInfo;
+  endpointBb84: EndpointBb84Progress;
   connection: ConnectionInfo;
-  state: Bb84RunState;
-  result: Bb84Result | null;
 }) {
   const active = encryption.state === 'encrypted_unverified' || encryption.state === 'encrypted_verified';
-  const encryptionLabel = active ? 'Active'
-    : encryption.state === 'failed' ? 'Failed'
-      : encryption.state === 'key_changed' ? 'Paused — key changed' : 'Setting up';
-  const labLabel = state === 'running' ? 'Running'
-    : state === 'error' ? 'Result unavailable'
-      : !result ? 'Not started'
-        : result.decision.status === 'aborted' || result.postProcessing.status !== 'completed'
-          ? 'Rejected' : 'Accepted';
 
   return (
     <section className="lab-protection" aria-labelledby="lab-protection-title">
-      <h3 id="lab-protection-title">How does this protect our chat?</h3>
-      <div className="lab-statuses" role="status" aria-atomic="true">
-        <span>BB84: <strong>{labLabel}</strong></span>
-        <span>Chat encryption: <strong>{encryptionLabel}</strong></span>
-        <span>BB84 key contribution: <strong>Not connected</strong></span>
-      </div>
-      <p>{active
-        ? 'Chat encryption is currently using ECDH and AES-256-GCM. The BB84 experiment is running separately.'
-        : 'Chat uses browser-based ECDH and AES-256-GCM when key setup succeeds. The BB84 experiment runs separately and cannot enable encryption.'}</p>
-      <ol className="lab-chat-flow" aria-label="Chat encryption flow">
-        {['Alice’s browser', 'Key establishment', 'AES message encryption', 'Encrypted message', 'AES decryption', 'Bob’s browser'].map((label) => (
-          <li key={label}>{label}</li>
-        ))}
-      </ol>
-      <p className="lab-small-note">{active
-        ? encryption.state === 'encrypted_verified'
-          ? 'Safety code: verified on this browser for the current key pair.'
-          : 'Safety code: unverified. Compare all 12 digits through another trusted channel.'
-        : encryption.state === 'key_changed'
-          ? 'Sending is paused. Review the changed key in the chat security panel.'
-          : 'Sending is paused until browser encryption is ready.'}
-        {' '}Connection: {connection.state === 'connected' ? 'Live' : connection.state}.
-        {connection.state !== 'connected' && ' Message delivery is unavailable until the connection returns.'}
-      </p>
+      <h3 id="lab-protection-title">Current chat protection</h3>
+      <ChatKeyModeSummary encryption={encryption} endpointBb84={endpointBb84} />
+      <p className="lab-protection__connection">{active ? `Safety code ${encryption.state === 'encrypted_verified' ? 'verified' : 'not verified'}` : 'Encryption is not ready'} · Connection {connection.state}.</p>
     </section>
   );
 }
@@ -56,9 +68,9 @@ export function ChatProtectionSummary({ encryption, connection, state, result }:
 export function LabParticipants() {
   return (
     <div className="lab-people" aria-label="People in the simulation">
-      <div><UserRound aria-hidden="true" /><span><strong>Alice</strong><small>Sends the information.</small></span></div>
-      <div><UserRound aria-hidden="true" /><span><strong>Bob</strong><small>Receives and measures it.</small></span></div>
-      <div><Eye aria-hidden="true" /><span><strong>Eve</strong><small>Represents someone trying to intercept the exchange.</small></span></div>
+      <div className="lab-person lab-person--alice"><UserRound aria-hidden="true" /><span><strong>Alice</strong><small>Sends the information.</small></span></div>
+      <div className="lab-person lab-person--bob"><UserRound aria-hidden="true" /><span><strong>Bob</strong><small>Receives and measures it.</small></span></div>
+      <div className="lab-person lab-person--eve"><Eye aria-hidden="true" /><span><strong>Eve</strong><small>Represents someone trying to intercept the exchange.</small></span></div>
     </div>
   );
 }
@@ -88,7 +100,7 @@ function experimentOutcome(result: Bb84Result): { success: boolean; detail: stri
   if (processing.status === 'completed') return {
     success: true,
     detail: 'Both participants completed the simulated key-generation process.',
-    next: 'Try increasing Eve’s interception and compare the error level. Your chat keys stay the same.',
+    next: 'Try increasing Eve’s interception and compare the error level. This room-hosted teaching run does not set chat keys; endpoint-owned BB84 can establish the hybrid chat epoch after mutual confirmation.',
   };
   if (processing.reason === 'insufficient_entropy') return {
     success: false,

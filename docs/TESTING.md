@@ -38,34 +38,40 @@ See [PANEL_DEMO.md](PANEL_DEMO.md) for the two-Mac presentation and scoped
 Wireshark instructions. A packet capture is a separate manual acceptance step;
 automated UI observations do not constitute one.
 
-## BB84 Security Lab acceptance
+## BB84 Security Lab and hybrid chat acceptance
 
-The existing commands below still apply; no dependency or wire-format change
-is required. The current frontend suite includes a separate
-`SecurityLabWalkthrough.test.tsx` for recorded stage values, hidden private bits,
-status independence, all post-processing failures, and keyboard step navigation.
-The existing App tests now open the advanced/technical disclosures explicitly.
+The current frontend suite includes endpoint-protocol tests and a two-endpoint
+chat integration test that verifies mutual confirmation and an AES-GCM message.
+Rendered UI tests cover ECDH-only, BB84 in progress, confirmed hybrid and
+switching back to ECDH in both Security Details and the BB84 Lab. Backend tests
+cover relay validation and origin/room protections. The separate
+`SecurityLabWalkthrough.test.tsx` covers the room-hosted teaching report.
 
-In two independent browser profiles:
+In two independent browser profiles, after completing the regular ECDH setup
+and safety-code comparison:
 
 1. Join one room with different names. Exchange messages and compare the full
    safety codes through a separate trusted channel. Mark the current pair
    verified locally. Refresh one browser and confirm matching history decrypts.
-2. Open **BB84 lab**. Check that **How does this protect our chat?** reflects
-   the actual browser key state and says **BB84 key contribution: Not connected**.
-3. Choose 1024 bits, no Eve, no background noise. Under advanced settings use
+2. Open **BB84 lab** and select **Start BB84 key exchange**. Confirm both
+   browsers show protocol progress and QBER, then show a confirmed contribution,
+   matching key confirmation, and an active hybrid epoch. Verify Security
+   Details and the Lab both report hybrid chat mode.
+3. Send and receive text after activation. Switch back to ECDH and confirm both
+   panels immediately show ECDH-only with the hybrid epoch inactive.
+4. Choose 1024 bits, no Eve, no background noise. Under advanced settings use
    seed 7 for a repeatable demonstration; select **Start BB84 Experiment**.
-4. Review all seven steps or use **Show all steps**. Compare counts to the
+5. Review all seven steps or use **Show all steps**. Compare counts to the
    technical report. Progress represents review, not live server computation.
-5. Run again with Eve at 100%. Confirm sample rejection and skipped final
+6. Run again with Eve at 100%. Confirm sample rejection and skipped final
    preparation. Set Eve back to 0% and choose 128 bits; confirm the clean sample
    can pass while final preparation stops for insufficient estimated material.
-6. Exchange another encrypted message. No lab outcome should change the chat
+7. Confirm that the separate room-hosted result does not change the active chat
    key, safety-code decision, or encryption-required room lock.
-7. At 390 × 844, open technical details and verify the lab fits the screen while
+8. At 390 × 844, open technical details and verify the lab fits the screen while
    its trace table scrolls internally. Tab/Shift-Tab must skip closed
    disclosures; Escape closes the lab and restores focus to its trigger.
-8. Test key replacement in a disposable browser profile only. The peer must
+9. Test key replacement in a disposable browser profile only. The peer must
    detect the change and pause sending. Never clear a real user's keys as a test.
 
 `scripts/browser_ui_smoke.mjs` automates this flow against a running app and two
@@ -77,9 +83,8 @@ identity at the end. Set `CHAT_BASE_URL`, `CHROME_DEBUG_URL`,
 For physical Macs, the existing [LAN_SETUP.md](LAN_SETUP.md) process is unchanged:
 both people open their own localhost app and use the complete LAN invitation.
 
-See [SECURITY_LAB_UPGRADE.md](SECURITY_LAB_UPGRADE.md) for actual executed
-checks and remaining hardware acceptance work. No BB84/AES hybrid tests are
-claimed because that mode is not implemented.
+See [SECURITY_LAB_UPGRADE.md](SECURITY_LAB_UPGRADE.md) for the earlier lab
+upgrade report. It predates the endpoint-owned hybrid implementation.
 
 ## Full Docker verification
 
@@ -340,14 +345,17 @@ browser, it complements rather than replaces the two-browser check.
   that its public seed and settings make it reconstructible and non-secret.
 - Confirm `key_material_exposed: false` is explained as absence of serialized
   key bytes, not as a secrecy guarantee.
-- Confirm Phase 4 chat remains encrypted independently of the Protocol Lab and
-  is never presented as protected by the simulation.
+- Confirm the room-hosted Protocol Lab does not change chat encryption state;
+  separately verify that endpoint-owned BB84 activates only after mutual key
+  confirmation.
 
 ## Encrypted media acceptance
 
 Use the paperclip to send a PNG and a short MP4/WebM under10MB between updated
 browser profiles. Open them on the recipient, play the video, refresh and rejoin,
 and reopen both from history. Cancel a selection and reject an oversized file.
-Expand How protection works and verify BB84 remains separate. The browser smoke
-now performs these checks plus a missing-capability acknowledgment test. See
+Expand How protection works and verify it describes the active ECDH-only or
+confirmed hybrid chat-key mode. The room-hosted teaching result must remain
+separate. The browser smoke performs these checks plus a missing-capability
+acknowledgment test. See
 [ENCRYPTED_MEDIA.md](ENCRYPTED_MEDIA.md) for lifecycle, quotas and actual results.

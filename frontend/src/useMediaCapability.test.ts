@@ -6,7 +6,7 @@ import type { ChatMessage, ChatSession, EncryptionInfo } from './types';
 const prefix = 'QKD-MEDIA-CONTROL-V1:';
 const session: ChatSession = { clientId: 'alice', displayName: 'Alice', roomCode: 'ROOM-42', roomRoute: 'local', roomHost: null };
 const encryption: EncryptionInfo = {
-  state: 'encrypted_unverified', canSend: true, sessionKeyId: 'pair-key', peerKeyId: 'bob-key', localKeyId: 'alice-key',
+  state: 'encrypted_unverified', canSend: true, activeKeyMode: 'ecdh', sessionKeyId: 'pair-key', peerKeyId: 'bob-key', localKeyId: 'alice-key',
   verificationCode: null, verifiedAt: null, peerName: 'Bob', keyStorage: 'device', error: null,
 };
 function control(type: 'hello' | 'ack', nonce: string, overrides: Partial<ChatMessage> = {}): ChatMessage {

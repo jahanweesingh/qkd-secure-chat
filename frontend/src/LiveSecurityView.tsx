@@ -6,12 +6,15 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { SecurityTraceEvent, SecurityTraceKind } from './securityTrace';
 import type { ConnectionInfo, EncryptionInfo } from './types';
+import type { EndpointBb84Progress } from './bb84ChatSession';
+import { ChatKeyModeSummary, EndpointBb84RuntimeSummary } from './SecurityLabWalkthrough';
 import './live-security.css';
 
 export interface LiveSecurityViewProps {
   events: SecurityTraceEvent[];
   connection: ConnectionInfo;
   encryption: EncryptionInfo;
+  endpointBb84: EndpointBb84Progress;
   onClear: () => void;
   onOpenLab: () => void;
   onOpenSecurity: () => void;
@@ -111,7 +114,7 @@ function incomingStages(events: SecurityTraceEvent[]): MessageStage[] {
 }
 
 /** Local, observational evidence only. A relay ACK never completes a remote stage. */
-export function LiveSecurityView({ events, connection, encryption, onClear, onOpenLab, onOpenSecurity }: LiveSecurityViewProps) {
+export function LiveSecurityView({ events, connection, encryption, endpointBb84, onClear, onOpenLab, onOpenSecurity }: LiveSecurityViewProps) {
   const headingId = useId();
   const [chosenDirection, setChosenDirection] = useState<Direction | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -248,7 +251,11 @@ export function LiveSecurityView({ events, connection, encryption, onClear, onOp
       <details className="live-security__technical">
         <summary>See technical details <ChevronDown size={15} aria-hidden="true" /></summary>
         <div>
-          <p><strong>Key establishment:</strong> browser P-256 ECDH → HKDF-SHA-256 → separate directional AES-256-GCM keys. A fresh random IV is used for each encrypted message, with reuse checks.</p>
+          <ChatKeyModeSummary encryption={encryption} endpointBb84={endpointBb84} />
+          <EndpointBb84RuntimeSummary encryption={encryption} endpointBb84={endpointBb84} />
+          <p><strong>Key derivation:</strong> {encryption.activeKeyMode === 'bb84_hybrid'
+            ? 'Browser P-256 ECDH shared secret + BB84 contribution → HKDF-SHA-256 → separate directional AES-256-GCM keys.'
+            : 'browser P-256 ECDH shared secret → HKDF-SHA-256 → separate directional AES-256-GCM keys.'} A fresh random IV is used for each encrypted message, with reuse checks.</p>
           <p><strong>Scope:</strong> the most recent 60 observations stay in this page’s memory. Times use this Mac’s clock; they are not cross-device latency measurements. History replay is excluded from this live view.</p>
           <p><strong>Media:</strong> this trace follows encrypted chat envelopes, including protected file descriptors and capability messages. Encrypted image/video data travels separately; these byte counts are not file-transfer progress.</p>
           <p><strong>Limits:</strong> a local decryption of your own relay echo does not prove remote delivery. Endpoint compromise can expose content. The current key design has no forward secrecy.</p>
@@ -258,7 +265,7 @@ export function LiveSecurityView({ events, connection, encryption, onClear, onOp
       <aside className="live-security__lab-link">
         <FlaskConical size={24} aria-hidden="true" />
         <div><h3>Demonstrate eavesdropping separately</h3>
-          <p>In the BB84 Security Lab, compare a clean run with Eve’s intercept-and-resend simulation. BB84 output is not connected to these chat keys; this is not physical quantum key distribution.</p></div>
+          <p>The room-hosted teaching report does not set chat keys. The endpoint-owned browser exchange can establish the active hybrid chat key after mutual confirmation. Both are software simulations, not physical quantum key distribution.</p></div>
         <button className="live-security__button" type="button" onClick={onOpenLab}>Open BB84 lab <ArrowRight size={15} aria-hidden="true" /></button>
       </aside>
     </section>

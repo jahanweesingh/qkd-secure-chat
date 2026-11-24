@@ -89,6 +89,38 @@ def test_cors_allows_configured_origin_and_rejects_unknown_origin(
     assert "access-control-allow-origin" not in rejected.headers
 
 
+def test_cors_allows_exact_https_cloudflare_tunnel_origin(settings: Settings) -> None:
+    tunnel_origin = "https://bb84-demo.trycloudflare.com"
+    tunnel_settings = Settings(
+        database_path=settings.database_path + "-cloudflare",
+        allowed_origins=("http://localhost:5173", tunnel_origin),
+        default_history_limit=settings.default_history_limit,
+        max_history_limit=settings.max_history_limit,
+        max_message_length=settings.max_message_length,
+        max_websocket_event_bytes=settings.max_websocket_event_bytes,
+        app_port=settings.app_port,
+    )
+    with TestClient(create_app(tunnel_settings)) as tunnel_client:
+        allowed = tunnel_client.options(
+            "/api/health",
+            headers={
+                "Origin": tunnel_origin,
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+        rejected = tunnel_client.options(
+            "/api/health",
+            headers={
+                "Origin": "https://other.trycloudflare.com",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+    assert allowed.status_code == 200
+    assert allowed.headers["access-control-allow-origin"] == tunnel_origin
+    assert rejected.status_code == 400
+    assert "access-control-allow-origin" not in rejected.headers
+
+
 def test_history_is_persisted_ordered_limited_and_uses_string_ids(
     client: TestClient,
 ) -> None:

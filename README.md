@@ -1,47 +1,51 @@
 # QKD Chat Lab
 
 A classroom secure-chat application for exploring browser-based encryption and
-a BB84 security simulation.
-
-QKD Chat Lab pairs two browser clients in a room. Chat uses P-256 ECDH and
-HKDF-SHA-256 to derive directional AES-256-GCM keys. A separate room-hosted
-BB84 lab demonstrates basis selection, sifting, QBER and educational
-post-processing; its output does not supply chat keys.
+BB84. Chat supports ECDH-only mode and an optional endpoint-owned BB84 + ECDH
+hybrid mode. The separate room-hosted BB84 lab is an educational simulation.
 
 ```mermaid
 flowchart LR
   A[Browser A] -->|public ECDH key| R[FastAPI room relay]
   R -->|peer public key| B[Browser B]
-  A -->|AES-GCM ciphertext envelope| R
-  R -->|ciphertext envelope| B
-  B -->|AES-GCM ciphertext envelope| R
-  R -->|ciphertext envelope| A
-  A -->|BB84 lab run settings| R
+  A -->|encrypted chat envelope| R
+  R -->|encrypted chat envelope| B
+  A -->|protected BB84 control envelope| R
+  R -->|protected BB84 control envelope| B
+  A -->|teaching run settings| R
   R -->|aggregate teaching result| A
   R -->|aggregate teaching result| B
 ```
 
-> **Security status:** The relay stores and forwards ciphertext for encrypted
-> chat messages, but the public-key exchange is not automatically authenticated.
-> Until participants compare the complete 12-digit safety code through another
-> trusted channel, an active man-in-the-middle attack remains possible. This
-> classroom prototype has no authenticated accounts, Double Ratchet, forward
-> secrecy or post-compromise security. The BB84 lab is a software simulation,
-> not physical quantum key distribution. Use it for demonstrations and
-> controlled testing, not confidential or high-risk communication.
+> **Security status:** Chat content is encrypted in the browsers and the relay
+> stores ciphertext. The public-key exchange is not automatically authenticated;
+> compare the complete 12-digit safety code through another trusted channel to
+> reduce active man-in-the-middle risk. The application has no authenticated
+> accounts, Double Ratchet, forward secrecy or post-compromise security. BB84 is
+> a software simulation, not physical quantum key distribution, and does not
+> provide security independent of ECDH. Use this classroom prototype for
+> demonstrations and controlled testing, not confidential or high-risk
+> communication.
 
 ## What you can explore
 
-- **Encrypted chat:** two browser endpoints encrypt and decrypt messages locally.
-  AES-256-GCM uses separate directional keys; the backend relays ciphertext.
-- **Image and video attachments:** choose and preview a file, then send it in a
-  ready encrypted room. File bytes are encrypted in the sender's browser and
+- **Encrypted chat:** browsers derive directional AES-256-GCM keys locally.
+  ECDH-only mode remains available as a fallback.
+- **Endpoint-owned BB84 key exchange:** both browsers independently run the
+  simulation. Reconciliation, privacy amplification and mutual key confirmation
+  must succeed before the matching contribution is combined with the ECDH
+  secret through HKDF-SHA-256 to derive a hybrid chat-key epoch. The backend
+  relays protected control messages; it does not receive BB84 contributions or
+  final chat keys.
+- **BB84 Security Lab experiment:** the room-hosted teaching simulation reports
+  QBER and post-processing results. It is separate from endpoint key exchange
+  and does not itself change chat keys. Its estimates are educational, not a
+  finite-key security proof.
+- **Image and video attachments:** choose and preview a file in a ready
+  encrypted room. File bytes are encrypted in the sender's browser and
   decrypted in the recipient's browser; files can be up to 10 MB.
 - **Encryption demo:** compare a disposable local learning exercise with live
   chat observations. Learning keys are separate from chat keys.
-- **BB84 Security Lab:** inspect a room-hosted educational simulation with Alice,
-  Bob, Eve, QBER, reconciliation and privacy amplification. A completed
-  experiment does not change chat encryption.
 
 ## Run locally
 
@@ -63,20 +67,23 @@ To stop the application while keeping its local message history:
 docker compose down
 ```
 
-The local database is stored in a named Docker volume. Removing that volume with
-`docker compose down -v` permanently deletes the local chat history.
+Removing the named data volume with `docker compose down -v` permanently deletes
+the local chat history.
 
 ## Try a demonstration
 
 1. Join the same room in two browser profiles with different names.
 2. Compare and verify the safety code out of band.
-3. Send text in both directions; try an image or short video.
-4. Open **Encryption demo** to inspect the learning exercise or live observations.
-5. Open **BB84 lab** to run and review the separate room-hosted simulation.
+3. Exchange text in both directions; try an image or short video.
+4. Start BB84 key exchange in both browsers and review progress, QBER and the
+   final key-confirmation status. A hybrid epoch is active only after both
+   endpoints confirm matching keys.
+5. Run the room-hosted BB84 experiment separately to inspect its teaching
+   results, with and without simulated Eve.
 
-The [panel demonstration guide](docs/PANEL_DEMO.md) provides a timed walkthrough.
-For hosted demonstrations, see [Render setup and limitations](docs/FREE_HOSTING.md).
-For two Macs on the same private network, follow [LAN setup](docs/LAN_SETUP.md).
+The [panel demonstration guide](docs/PANEL_DEMO.md) provides a walkthrough. For
+hosted demonstrations, see [Render setup and limitations](docs/FREE_HOSTING.md).
+For two Macs on a private network, follow [LAN setup](docs/LAN_SETUP.md).
 
 ## Verify changes
 
@@ -96,12 +103,11 @@ current verification.
 
 ```text
 frontend/       React, TypeScript and Vite browser application
-backend/        FastAPI relay, room-hosted BB84 simulator and SQLite storage
+backend/        FastAPI relay, endpoint BB84 protocol and teaching simulator
 deploy/         Render Docker image and startup script
 scripts/        LAN launcher and smoke-test helpers
 docs/           Architecture, API, security, setup and testing guides
 ```
 
-For configuration and development without Docker, see [development and configuration](docs/DEVELOPMENT.md).
-
-The repository's documentation index is [docs/README.md](docs/README.md).
+For configuration and local development, see [development and configuration](docs/DEVELOPMENT.md).
+The documentation index is [docs/README.md](docs/README.md).

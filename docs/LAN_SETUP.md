@@ -163,9 +163,11 @@ handshake, Double Ratchet, forward secrecy or post-compromise security. A
 compromised Mac, browser, extension or local application code can read
 plaintext.
 
-The separate creator-hosted BB84/QBER and post-processing report remains a
-classical teaching simulation. Temporary derived material is discarded and
-never supplies, verifies or changes chat keys.
+The creator-hosted BB84/QBER and post-processing report remains a classical
+teaching simulation. Temporary derived material is discarded and never
+supplies, verifies or changes chat keys. The separate endpoint-owned exchange
+uses the protected WebSocket relay and can activate a hybrid chat key only
+after mutual confirmation; it provides no security independent of ECDH.
 
 A teaching seed is included in the shared public result. A seeded run is
 deterministic and reconstructible by anyone with the shared settings and

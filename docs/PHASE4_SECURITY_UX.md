@@ -24,17 +24,18 @@ facts separate:
 3. whether this user compared the current safety code; and
 4. whether the local private key can survive a refresh.
 
-The Protocol Lab remains a separate teaching simulation and never controls the
-chat encryption label.
+The room-hosted Protocol Lab remains a separate teaching simulation. The BB84
+Security Lab also exposes the endpoint-owned exchange; its output controls the
+chat encryption label only after mutual confirmation activates the hybrid
+epoch.
 
 ## BB84 Security Lab status and walkthrough
 
-The beginner lab now receives the real `EncryptionInfo` from the chat hook.
-Its **How does this protect our chat?** section shows setting up, active,
-failed, or paused/key-changed from that state. Connection remains a separate
-label. Only `encrypted_verified` may show local safety-code verification.
-The BB84 contribution always says **Not connected**, reflecting the actual
-ECDH-only implementation; no experiment result can activate it.
+The lab reads the authoritative encryption mode from the chat hook and combines
+it with endpoint protocol state. It distinguishes a completed experiment from
+an active hybrid epoch, and reports ECDH fallback after switching back.
+Connection remains a separate label. Only `encrypted_verified` may show local
+safety-code verification.
 
 BB84 status is not started, running, accepted, rejected, or result unavailable.
 Here accepted means the complete post-processing pipeline finished. If the
@@ -351,7 +352,9 @@ Supporting copy:
 Show this at the top and after each experiment result:
 
 > **Teaching simulation only**  
-> This BB84 experiment does not create, verify or change the keys used by chat.
+> This room-hosted teaching experiment does not create, verify or change the
+> keys used by chat. The endpoint-owned exchange is separately labelled and
+> activates only after mutual confirmation.
 
 Do not reuse chat-encryption locks in BB84 controls. Never label a passed QBER
 sample **safe channel**, **secure**, **verified** or **attack free**.

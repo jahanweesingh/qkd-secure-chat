@@ -17,7 +17,9 @@ still necessary to authenticate the public-key exchange.
 
 Render Free uses temporary SQLite and media storage: sleep, restart or redeploy
 can discard them. This is a classroom demo deployment, not durable messaging.
-BB84 remains a separate backend software simulation and does not supply chat keys.
+The room-hosted BB84 teaching run remains separate from chat keys. An additional
+endpoint-owned browser simulation can establish a hybrid chat-key epoch after
+both endpoints confirm the contribution.
 
 > **Editorial UI update (13 November 2026):** the text-only `CafeWelcome` wrapper
 > reuses the existing join form. `cafe-workspace.css` owns the masthead,
@@ -63,10 +65,10 @@ The backend now shields disconnect cleanup against ASGI cancellation and bounds
 the cleanup/presence send to two seconds. This prevents a cancelled WebSocket
 handler from retaining stale participants or advertised keys.
 
-No API, WebSocket format, cryptographic primitive, schema or dependency changed.
-BB84-to-AES integration is deliberately deferred; see
-[BB84_AES_INTEGRATION_PLAN.md](BB84_AES_INTEGRATION_PLAN.md) for the current
-lifecycle and proposed endpoint-owned protocol. All boundaries below still apply.
+The endpoint-owned BB84 integration adds a dedicated `bb84_control` relay event
+and browser state machine. See [BB84_AES_INTEGRATION_PLAN.md](BB84_AES_INTEGRATION_PLAN.md)
+for the protocol profile, implementation boundaries and remaining security
+limitations. The original room-hosted teaching report remains a separate flow.
 
 ## Runtime layout
 
@@ -89,15 +91,56 @@ P-256 + AES-GCM              P-256 + AES-GCM
 ```
 
 Nginx serves the React interface and forwards `/api` and `/ws` to FastAPI.
-Each browser creates its own P-256 ECDH identity, derives directional
-AES-256-GCM keys with HKDF-SHA-256, encrypts before sending and decrypts after
-receiving. FastAPI validates room input and opaque E2EE envelopes, manages live
-connections, durably locks an advertised-key room to `e2ee_required`, stores
-ciphertext plus routing metadata, runs the classical BB84 model and produces
-the separate Phase 3 educational post-processing report.
+Each browser creates its own P-256 ECDH identity. In ECDH-only mode it derives
+directional AES-256-GCM keys with HKDF-SHA-256 from ECDH. In confirmed hybrid
+mode it combines ECDH with the locally derived endpoint-owned BB84 contribution
+before deriving directional keys. FastAPI validates room input and opaque E2EE
+envelopes, forwards bounded encrypted BB84 control envelopes without opening
+them, manages live connections, stores ciphertext plus routing metadata, and
+produces the separate Phase 3 educational report.
 
-Chat storage and the protocol experiment remain separate. No post-processing
-decision supplies, verifies or changes Phase 4 browser keys.
+## Endpoint-owned BB84 mode (implemented prototype)
+
+The separate `bb84_start`/`bb84_result` path above remains the
+backend-owned teaching lab. The optional BB84 chat mode is specified in
+[BB84_AES_INTEGRATION_PLAN.md](BB84_AES_INTEGRATION_PLAN.md); it does not reuse
+the backend-generated teaching result. In this mode, Alice and Bob independently
+participate in a browser simulation. Alice generates preparation bits/bases;
+Bob independently generates measurement bases/outcomes; they locally retain
+and process their own candidate data. Required classical simulation data is
+sent only inside a dedicated AEAD-protected control channel derived from the
+existing ECDH secret.
+
+The backend behavior is limited to validating bounded routing fields
+and forwarding an opaque `bb84_control` envelope. It does not decrypt or store
+control payloads, candidate bits, the BB84-derived contribution, combined KDF
+input, confirmation keys, or final chat keys. The control protocol binds each
+packet to the room, current pair, roles, configuration, run, sequence, and
+transcript; endpoints enforce ordering, replay rejection, and state transitions.
+Sifting, sampling, reconciliation, privacy amplification, and key confirmation
+are independently checked by both browsers.
+
+After both endpoints derive the same local contribution, they derive
+transcript-bound, directional chat keys and separate confirmation keys using
+HKDF-SHA-256 over a versioned encoding of both the existing ECDH secret and
+the BB84-derived contribution. This is not security independent of ECDH: ECDH
+protects the simulated exchange, and the design provides no genuine quantum
+security. A new key epoch is activated only after both sides confirm it. An
+abort or uncertain disconnect immediately pauses the detecting endpoint; an
+authenticated abort pauses its peer when received. Any connection loss
+invalidates the run, and reconnect requires a fresh run or explicit ECDH-only
+selection. Pending BB84-mode messages are discarded. A remote browser cannot
+learn instantly about a one-way failure; the protocol does not claim
+simultaneous fail-stop behavior under arbitrary partitions. The ECDH-only chat
+remains a separate supported mode with its current contract.
+
+The bounded demonstration profile is fixed at 1,024 states in batches of 64,
+quarter sampling with a 32-bit minimum sample, one 16-bit-block parity/bisection
+pass, an illustrative binary-entropy estimate with a 32-bit margin, and a
+128-bit Toeplitz output. Exact control schemas, AES-GCM AAD/nonce rules,
+pre-confirmation transcript cutoff, KDF labels, and transitions are specified
+in the integration plan; these settings are educational assumptions, not a
+finite-key security proof.
 
 ## Phase 4 chat flow
 

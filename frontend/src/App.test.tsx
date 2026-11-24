@@ -327,6 +327,27 @@ describe('QKD Chat Lab experience', () => {
     expect(screen.getByText(/Sending stays paused until both browsers exchange public keys/i)).toBeVisible();
   });
 
+  it('shows ECDH-only mode and that endpoint BB84 has not completed in Security Details', async () => {
+    const { user, socket } = await enterKnownRoom();
+    act(() => {
+      socket.open();
+      socket.receive({
+        type: 'connected', client_id: new URL(socket.url).searchParams.get('client_id'),
+        room_id: 'ROOM-42', participants: [], messages: [],
+      });
+    });
+    await waitForEncryptedComposer();
+    await user.click(screen.getByRole('button', { name: /Encrypted · Unverified.*Open encryption details/i }));
+    expect(screen.getByRole('dialog', { name: 'Security details' })).toBeVisible();
+    const securitySummary = screen.getByRole('status', { name: 'Current chat security' });
+    expect(securitySummary).toHaveTextContent('ECDH-only');
+    expect(securitySummary).toHaveTextContent(/BB84 contribution\s+Not started/);
+    expect(securitySummary).toHaveTextContent(/Key confirmation\s+Not reached/);
+    expect(securitySummary).toHaveTextContent('AES-256-GCM');
+    await user.click(screen.getByText('Technical details'));
+    expect(screen.getByText(/ECDH shared secret → HKDF-SHA-256 → separate directional AES-256-GCM keys/)).toBeVisible();
+  });
+
   it('keeps workspace tools together and supports the room-notes drawer by keyboard', async () => {
     const media = { matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() } as unknown as MediaQueryList;
     vi.spyOn(window, 'matchMedia').mockReturnValue(media);
@@ -1346,12 +1367,17 @@ describe('QKD Chat Lab experience', () => {
 
     await user.click(screen.getByRole('button', { name: 'Open BB84 Security Lab' }));
     expect(screen.getByRole('dialog', { name: 'BB84 Security Lab' })).toBeVisible();
-    expect(screen.getByText('A software experiment, separate from your chat')).toBeVisible();
+    expect(screen.getByText(/Software simulation only/i)).toBeVisible();
     await waitForEncryptedComposer();
-    const protectionMap = screen.getByRole('region', { name: 'How does this protect our chat?' });
-    expect(within(protectionMap).getByText('Active')).toBeVisible();
-    expect(within(protectionMap).getByText('Not connected')).toBeVisible();
-    expect(within(protectionMap).getByText(/currently using ECDH and AES-256-GCM/)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Start BB84 key exchange' })).toBeEnabled();
+    expect(screen.getByText(/switches to the hybrid key only after both confirm it/i)).toBeVisible();
+    const lab = screen.getByRole('dialog', { name: 'BB84 Security Lab' });
+    expect(within(lab).getByText('ECDH-only chat active')).toBeVisible();
+    expect(within(lab).getByRole('list', { name: 'Endpoint BB84 establishment steps' })).toBeVisible();
+    expect(within(lab).getByLabelText('BB84 sample error rate')).toHaveTextContent('Waiting for sample');
+    expect(within(lab).queryByRole('status', { name: 'Current chat security' })).not.toBeInTheDocument();
+    expect(within(lab).getByText('Bits to prepare')).not.toBeVisible();
+    await user.click(screen.getByText('Room-hosted teaching simulation · advanced'));
     await user.click(screen.getByText('Experiment settings · advanced'));
 
     await user.selectOptions(screen.getByRole('combobox', { name: /Bits to prepare/i }), '256');
@@ -1429,9 +1455,11 @@ describe('QKD Chat Lab experience', () => {
       }],
     }));
 
+    const teachingResult = await screen.findByRole('status', { name: 'Room-hosted teaching result' });
+    expect(teachingResult).toHaveTextContent('Below the demo threshold');
+    expect(teachingResult).toHaveTextContent('10.53%');
+    await user.click(screen.getByText('Explore the teaching run step by step'));
     await user.click(await screen.findByText('Show technical details'));
-    expect(await screen.findByText('Sample accepted')).toBeVisible();
-    expect(screen.getByText('10.53%')).toBeVisible();
     expect(screen.getByText('2 selected transmissions, with no raw bit values')).toBeVisible();
     expect(screen.getByRole('region', { name: 'From accepted sample to discarded material' })).toBeVisible();
     expect(screen.getByText('Not enough estimated secret information')).toBeVisible();
@@ -1467,6 +1495,7 @@ describe('QKD Chat Lab experience', () => {
       });
     });
     await user.click(screen.getByRole('button', { name: 'Open BB84 Security Lab' }));
+    await user.click(screen.getByText('Room-hosted teaching simulation · advanced'));
 
     act(() => socket.receive({
       ...bb84BasePayload,
@@ -1497,14 +1526,15 @@ describe('QKD Chat Lab experience', () => {
       }],
     }));
 
+    await user.click(screen.getByText('Explore the teaching run step by step'));
     await user.click(await screen.findByText('Show technical details'));
     const panel = await screen.findByRole('region', {
       name: 'From accepted sample to discarded material',
     });
     expect(within(panel).getByText('Post-processing model completed')).toBeVisible();
-    expect(within(panel).getByText('Chat encryption: Independent')).toBeVisible();
-    expect(within(panel).getByText(/Chat key setup is independent/i)).toBeVisible();
-    expect(within(panel).getByText(/simulation never supplies or changes the live chat keys/i)).toBeVisible();
+    expect(within(panel).getByText('Room-hosted report: Independent teaching simulation')).toBeVisible();
+    expect(within(panel).getByText(/room-hosted report does not set chat keys/i)).toBeVisible();
+    expect(within(panel).getByText(/endpoint-owned BB84 may establish the active hybrid epoch after confirmation/i)).toBeVisible();
     expect(within(panel).getAllByText('Completed')).toHaveLength(4);
     expect(within(panel).getByText('toeplitz-universal-hash-v1')).toBeVisible();
     expect(within(panel).getByText('hkdf-sha256-v1')).toBeVisible();
@@ -1559,6 +1589,7 @@ describe('QKD Chat Lab experience', () => {
       });
     });
     await user.click(screen.getByRole('button', { name: 'Open BB84 Security Lab' }));
+    await user.click(screen.getByText('Room-hosted teaching simulation · advanced'));
 
     act(() => socket.receive({
       ...bb84BasePayload,
@@ -1580,6 +1611,7 @@ describe('QKD Chat Lab experience', () => {
       post_processing: postProcessing,
     }));
 
+    await user.click(screen.getByText('Explore the teaching run step by step'));
     await user.click(await screen.findByText('Show technical details'));
     const panel = await screen.findByRole('region', {
       name: 'From accepted sample to discarded material',
@@ -1607,6 +1639,7 @@ describe('QKD Chat Lab experience', () => {
       });
     });
     await user.click(screen.getByRole('button', { name: 'Open BB84 Security Lab' }));
+    await user.click(screen.getByText('Room-hosted teaching simulation · advanced'));
     await user.click(screen.getByRole('button', { name: /Start BB84 Experiment|Run another experiment/ }));
 
     const packets = socket.sent.map((packet) => JSON.parse(packet) as Record<string, unknown>);
@@ -1628,8 +1661,10 @@ describe('QKD Chat Lab experience', () => {
       socket.receive({ type: 'connected', client_id: new URL(socket.url).searchParams.get('client_id'), room_id: 'ROOM-42', participants: [], messages: [] });
     });
     await user.click(screen.getByRole('button', { name: 'Open BB84 Security Lab' }));
+    await user.click(screen.getByText('Room-hosted teaching simulation · advanced'));
     act(() => socket.receive(bb84BasePayload));
-    await screen.findByText('Experiment stopped');
+    const teachingResult = await screen.findByRole('status', { name: 'Room-hosted teaching result' });
+    expect(teachingResult).toHaveTextContent('Below the demo threshold');
     const select = screen.getByRole('combobox', { name: /Bits to prepare/ });
     act(() => {
       fireEvent.change(screen.getByRole('slider', { name: 'Eve’s interception percentage' }), { target: { value: '50' } });
@@ -1637,7 +1672,7 @@ describe('QKD Chat Lab experience', () => {
       fireEvent.change(select, { target: { value: '128' } });
     });
     expect(select).toHaveValue('128');
-    expect(screen.getByText('Experiment stopped')).toBeVisible();
+    expect(teachingResult).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Run another experiment' }));
     const command = socket.sent.map((packet) => JSON.parse(packet) as Record<string, unknown>).find((packet) => packet.type === 'bb84_start');
     expect(command).toMatchObject({ qubit_count: 128, intercept_probability: 0.5 });
@@ -1656,6 +1691,7 @@ describe('QKD Chat Lab experience', () => {
       });
     });
     await user.click(screen.getByRole('button', { name: 'Open BB84 Security Lab' }));
+    await user.click(screen.getByText('Room-hosted teaching simulation · advanced'));
 
     act(() => socket.receive({
       ...bb84BasePayload,
@@ -1679,6 +1715,7 @@ describe('QKD Chat Lab experience', () => {
       post_processing: insufficientEntropyPostProcessing(19, true),
     }));
 
+    await user.click(screen.getByText('Explore the teaching run step by step'));
     await user.click(await screen.findByText('Show technical details'));
     const summary = await screen.findByRole('region', { name: 'Recorded BB84 session settings' });
     expect(within(summary).getByText('sim_aabbccddeeff001122334455')).toBeVisible();
@@ -1711,6 +1748,7 @@ describe('QKD Chat Lab experience', () => {
       });
     });
     await user.click(screen.getByRole('button', { name: 'Open BB84 Security Lab' }));
+    await user.click(screen.getByText('Room-hosted teaching simulation · advanced'));
 
     act(() => socket.receive({
       ...bb84BasePayload,
@@ -1732,10 +1770,12 @@ describe('QKD Chat Lab experience', () => {
       post_processing: skippedPostProcessing(48),
     }));
 
+    const teachingResult = await screen.findByRole('status', { name: 'Room-hosted teaching result' });
+    expect(teachingResult).toHaveTextContent('Experiment aborted');
+    await user.click(screen.getByText('Explore the teaching run step by step'));
     await user.click(await screen.findByText('Show technical details'));
-    expect(await screen.findByText('Sample rejected')).toBeVisible();
     expect(screen.getByText('25.00%')).toBeVisible();
-    expect(screen.getByText(/exceeded the selected QBER limit/i)).toBeVisible();
+    expect(screen.getAllByText(/exceeded the selected QBER limit/i)).toHaveLength(2);
     expect(screen.getByText('Post-processing was not started')).toBeVisible();
     expect(screen.getAllByText('Not run')).toHaveLength(4);
 
@@ -1763,6 +1803,7 @@ describe('QKD Chat Lab experience', () => {
       });
     });
     await user.click(screen.getByRole('button', { name: 'Open BB84 Security Lab' }));
+    await user.click(screen.getByText('Room-hosted teaching simulation · advanced'));
 
     act(() => socket.receive({
       ...bb84BasePayload,
@@ -1781,9 +1822,11 @@ describe('QKD Chat Lab experience', () => {
       trace: [],
     }));
 
+    const teachingResult = await screen.findByRole('status', { name: 'Room-hosted teaching result' });
+    expect(teachingResult).toHaveTextContent('Experiment aborted');
+    await user.click(screen.getByText('Explore the teaching run step by step'));
     await user.click(await screen.findByText('Show technical details'));
-    expect(await screen.findByText('Sample rejected')).toBeVisible();
-    expect(screen.getByText(/Too few matching-basis measurements remained/i)).toBeVisible();
+    expect(screen.getAllByText(/Too few matching-basis measurements remained/i)).toHaveLength(2);
     expect(screen.getByText('N/A')).toBeVisible();
     expect(screen.getByText('0 ÷ 0 = undefined')).toBeVisible();
     expect(screen.getByText('Post-processing was not started')).toBeVisible();
@@ -1802,9 +1845,11 @@ describe('QKD Chat Lab experience', () => {
       });
     });
     await user.click(screen.getByRole('button', { name: 'Open BB84 Security Lab' }));
+    await user.click(screen.getByText('Room-hosted teaching simulation · advanced'));
 
     act(() => socket.receive(bb84BasePayload));
 
+    await user.click(screen.getByText('Explore the teaching run step by step'));
     await user.click(await screen.findByText('Show technical details'));
     const summary = await screen.findByRole('region', { name: 'Recorded BB84 session settings' });
     expect(within(summary).getByText('Seed')).toBeVisible();
@@ -1825,6 +1870,7 @@ describe('QKD Chat Lab experience', () => {
     });
     await waitForEncryptedComposer();
     await user.click(screen.getByRole('button', { name: 'Open BB84 Security Lab' }));
+    await user.click(screen.getByText('Room-hosted teaching simulation · advanced'));
 
     vi.useFakeTimers();
     fireEvent.click(screen.getByRole('button', { name: /Start BB84 Experiment|Run another experiment/ }));
@@ -1843,7 +1889,7 @@ describe('QKD Chat Lab experience', () => {
     expect(close).toHaveFocus();
 
     await user.keyboard('{Shift>}{Tab}{/Shift}');
-    expect(screen.getByText('Experiment settings · advanced')).toHaveFocus();
+    expect(screen.getByText('Room-hosted teaching simulation · advanced')).toHaveFocus();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'BB84 Security Lab' })).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
