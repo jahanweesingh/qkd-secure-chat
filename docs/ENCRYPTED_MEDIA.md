@@ -98,14 +98,10 @@ checks remain in that run. Unit tests additionally cover tampered ciphertext,
 wrong room/ID binding, bounded downloads, malformed/unsafe manifests, URL cleanup,
 capability replay/key changes, and key changes while an upload is pending.
 
-[Machine-readable browser report](../artifacts/media-upgrade/report.json),
-[desktop media](../artifacts/media-upgrade/14-media-desktop.png),
-[mobile media](../artifacts/media-upgrade/15-media-mobile.png),
-[protection explanation](../artifacts/media-upgrade/16-encryption-story-desktop.png)
-and [static audit](../artifacts/media-upgrade/premium-audit.json) are retained.
-All17 screenshots are in `artifacts/media-upgrade`. The existing test-only browser
-harness at `artifacts/upgrade-ui/harness` can be rerun with that directory mounted
-at `/artifacts`, using the procedure in SECURITY_LAB_UPGRADE.md.
+**Evidence availability:** This checkout does not include the browser report,
+screenshots, static audit or test-only browser harness named by the original
+handoff. Those artifacts cannot be reviewed or reproduced from this copy. No
+replacement screenshots or results are asserted.
 
 Physical two-Mac and Safari/iPhone codec checks were not performed. No independent
 cryptographic audit is claimed. No new production dependency was added.
@@ -144,8 +140,9 @@ cryptographic audit is claimed. No new production dependency was added.
 - `DESIGN.md`, README files, architecture/status/security/testing docs,
   this report, backup notes and `artifacts/media-upgrade` evidence.
 
-The existing `e2ee.ts`, `useChat.ts` and Python BB84 implementation were compared
-with the pre-change backup and remain unchanged. The backup is
-`backups/before-encrypted-media.tar.gz`; see backups/README.md for its checksum
-and safe restore instructions. Attachment storage is an additive SQLite table;
-existing encrypted chat rows and keys are not migrated or replaced.
+The original report says the existing `e2ee.ts`, `useChat.ts` and Python BB84
+implementation were compared with a pre-change backup. That backup and its
+restore notes are not included in this checkout, so this comparison cannot be
+repeated from the available files. The report describes attachment storage as
+an additive SQLite table; existing encrypted chat rows and keys are not
+migrated or replaced.

@@ -90,9 +90,10 @@ production TLS, and the lab's entropy estimate is not a finite-key proof.
 
 ## Verification actually executed
 
-Before edits, a complete source/artifact backup was made; see
-[backups/README.md](../backups/README.md) for its SHA-256 and restore procedure.
-There was no Git repository metadata, so the requested backup option was used.
+The historical report states that a source/artifact backup was made because its
+working copy had no Git metadata. The backup archive and its checksum/restore
+notes are not included in this checkout, so they cannot be verified or restored
+from these files.
 
 The initial frontend baseline passed all **55** tests, lint, TypeScript and
 production build. A fresh backend installation initially hung after 41 passing
@@ -117,65 +118,37 @@ settings-event bug. Both were fixed and the full browser flow rerun successfully
 The final bundle is 258.86 kB JavaScript (79.93 kB gzip) and 94.27 kB CSS
 (20.01 kB gzip). No production dependencies were added.
 
-The browser report and ten screenshots are under
-[artifacts/upgrade-ui](../artifacts/upgrade-ui), including
-[the machine-readable result](../artifacts/upgrade-ui/report.json),
-[desktop walkthrough](../artifacts/upgrade-ui/06-bb84-walkthrough-desktop.png),
-and [mobile walkthrough](../artifacts/upgrade-ui/07-bb84-walkthrough-mobile.png).
-The `/artifacts` paths inside the JSON refer to that mounted host directory.
+**Evidence availability:** The historical report describes a browser report and
+ten screenshots under `artifacts/upgrade-ui/`. That directory is not included
+in this checkout, so those screenshots and measurements are unavailable for
+review here. No substitute evidence is presented.
 
 Two **physical Macs** were not available. The Docker relay test checks the
 network route; it is not a claim of physical hotspot/firewall acceptance.
 No independent cryptographic audit, full screen-reader audit, or hybrid-mode
 test is claimed. No live per-stage backend stream was implemented.
 
-## Run and demonstrate
+## Historical demonstration procedure
 
-The upgrade preview is isolated at **http://localhost:8088** under Compose
-project `bb84-upgrade-check`. The original stack and volume are untouched.
-From the project root, its reproducible configuration is:
+The original procedure described a preview at **http://localhost:8088** under
+Compose project `bb84-upgrade-check`. Its isolated configuration,
+`artifacts/upgrade-ui/preview.env`, is not included in this checkout, so that
+preview cannot be started from the repository as provided. The normal local
+Docker and LAN procedures remain in [the testing guide](TESTING.md) and
+[LAN setup](LAN_SETUP.md).
 
-```sh
-docker compose -p bb84-upgrade-check --env-file artifacts/upgrade-ui/preview.env up --build -d
-```
+The historical mentor scenario used two browser profiles, safety-code
+comparison, and BB84 settings with and without simulated Eve. The report says
+chat encryption remained independent of that teaching experiment. The scenario
+is a description of the prior report, not a new run or a current test result.
 
-Use two independent browser profiles or a normal/private pair with different
-names. Join the same room, wait for encryption, exchange messages, and compare
-the safety code separately before recording verification. Open **BB84 lab**.
-For the mentor demonstration use 1024 bits, zero noise/Eve, seed 7 in advanced
-settings; review the successful result. Then set Eve to 100% to see rejection.
-With Eve back at 0%, use 128 bits to show why passing a sample is not sufficient
-for a final key. Chat encryption remains independent throughout.
+## Browser-check reproduction availability
 
-Stop only this preview, preserving its history:
-
-```sh
-docker compose -p bb84-upgrade-check --env-file artifacts/upgrade-ui/preview.env down
-```
-
-The normal `docker compose up --build -d` workflow and
-`./scripts/start_lan.sh` remain valid for the main application. Both Macs must
-open their own localhost page; see [LAN_SETUP.md](LAN_SETUP.md).
-
-## Reproduce the browser check in a disposable container
-
-The retained harness installs Chromium in a **test-only image**, starts two
-isolated browser profiles, and forwards its localhost:8088 to the production
-Nginx service in the shared network namespace. It uses no production package.
-It does not disable the application's secure-origin check. Start the preview
-above, then run from the project root:
-
-```sh
-docker build -t bb84-upgrade-browser-qa artifacts/upgrade-ui/harness
-docker run --rm --network container:bb84-upgrade-check-frontend-1 \
-  -v "$PWD/scripts:/smoke:ro" \
-  -v "$PWD/artifacts/upgrade-ui:/artifacts" \
-  -v "$PWD/artifacts/upgrade-ui/harness:/qa:ro" \
-  bb84-upgrade-browser-qa node /qa/run.mjs
-```
-
-The script deletes only Bob's newly created test-room identity to test key-change
-detection. Use disposable profiles with the alternative host-Chrome procedure.
+The original browser check depended on
+`artifacts/upgrade-ui/harness` and its generated preview configuration. Neither
+is included in this checkout, so the old disposable-container commands cannot be
+run from these files. Use the maintained [testing guide](TESTING.md) for current
+test procedures. No new browser run or screenshot is claimed here.
 
 ## File-by-file manifest
 
@@ -195,8 +168,8 @@ detection. Use disposable profiles with the alternative host-Chrome procedure.
 | `docs/BB84_AES_INTEGRATION_PLAN.md` | Current key lifecycle, rejected shortcut, endpoint-owned proposal and implementation gates |
 | `docs/SECURITY_LAB_UPGRADE.md` | This delivery report and mentor guide |
 | `DESIGN.md` | Existing visual tokens, component ownership and progressive-disclosure rules |
-| `backups/` | Pre-edit archive, checksum and safe restore instructions |
-| `artifacts/upgrade-ui/` | Browser report, screenshots, isolated preview config and reproducible test harness |
+| `backups/` | The historical report names a backup archive; it is not included in this checkout. |
+| `artifacts/upgrade-ui/` | The historical report names screenshots, a report and a browser harness; they are not included in this checkout. |
 
 All original project files remain. The existing encryption code, hook,
 simulation, post-processing, relay, database and dependency manifests were

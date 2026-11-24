@@ -109,10 +109,13 @@ over LAN; both browsers then use their own localhost:8080.
   Encryption demo trigger. The 390 × 844 layout was visually checked and the
   temporary viewport was reset. DevTools showed zero console messages in the
   tested live-chat window.
-- Screenshots: `artifacts/presentation/08-simple-learning.png`,
-  `09-simple-live.png`, `10-simple-mobile.png`, `11-clean-chat.png`. The first
-  screenshot intentionally includes disposable learning keys. The audit is
-  `artifacts/presentation/simple-design-audit.json`.
+- The original report names screenshots
+  `artifacts/presentation/08-simple-learning.png`,
+  `09-simple-live.png`, `10-simple-mobile.png`, and `11-clean-chat.png`, plus
+  `artifacts/presentation/simple-design-audit.json`. These assets are not
+  included in this checkout and cannot be reviewed here. The report says the
+  learning screenshot contains disposable learning keys; no screenshot is
+  reproduced in this repository copy.
 
 The backend, production `e2ee.ts`, dependency manifests and WebSocket contract
 were unchanged. The previously passing 133-test backend suite was not rerun for

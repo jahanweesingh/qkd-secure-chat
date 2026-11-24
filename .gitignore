@@ -1,7 +1,12 @@
 .DS_Store
-.env
-.env.lan
-.env.lan.tmp.*
+.env*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets/
 *.log
 .coverage
 .pytest_cache/

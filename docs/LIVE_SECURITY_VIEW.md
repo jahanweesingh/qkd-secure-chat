@@ -112,10 +112,10 @@ demo sentence. Browser DevTools was clear during the initial message/lab/mobile
 checks; restarting the isolated preview subsequently produced expected
 WebSocket reconnect errors, followed by successful reconnection.
 
-Screenshots are in `artifacts/presentation/`: sender, receiver, Eve comparison,
-mobile lab, mobile live view and the final desktop build. The saved strict audit
-is `artifacts/presentation/design-audit.json`. Final Docker assets are 306.72 kB
-JavaScript and 128.96 kB CSS before gzip.
+The historical report names screenshots and a strict audit under
+`artifacts/presentation/`; those files are not included in this checkout and
+cannot be reviewed here. The bundle sizes above are historical report values,
+not a measurement of the current build.
 
 This session did **not** perform a physical two-Mac acceptance run or a Wireshark
 capture. The interactive browser check used two names/identities in one Chrome

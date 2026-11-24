@@ -57,13 +57,10 @@ Screenshot review caught clipped mobile labels; the final browser run now checks
 their clipping and visibility in addition to their dimensions. Both browser
 consoles were free of errors and warnings.
 
-[Browser report](../artifacts/frontend-polish/report.json),
-[desktop welcome](../artifacts/frontend-polish/01-onboarding-desktop.png),
-[desktop chat](../artifacts/frontend-polish/03-encrypted-conversation-desktop.png),
-[mobile chat](../artifacts/frontend-polish/04-encrypted-conversation-mobile.png),
-and [static audit](../artifacts/frontend-polish/premium-audit.json) are retained.
-There are thirteen browser screenshots in that directory. The `/artifacts`
-paths in the JSON refer to the mounted `artifacts/frontend-polish` directory.
+**Evidence availability:** The original report refers to a browser report,
+thirteen screenshots and a static audit under `artifacts/frontend-polish/`.
+Those files are not included in this checkout, so the visual evidence cannot be
+reviewed here. No replacement screenshots or report results are asserted.
 
 This pass did not repeat the unchanged backend unit suite or physical two-Mac
 tests. The previous backend/relay results remain in
@@ -76,19 +73,8 @@ Production changes: `frontend/src/App.tsx`, `frontend/src/styles.css`, and
 `frontend/src/security-lab.css`. The existing final presentation layer was
 replaced; crypto code and the application framework were preserved.
 
-Supporting changes: `frontend/src/App.test.tsx`, `scripts/browser_ui_smoke.mjs`,
-`DESIGN.md`, `README.md`, `frontend/README.md`, `docs/TEST_RESULTS.md`, this report,
-`backups/README.md`, and the screenshot/report artifacts.
-
-An incremental pre-polish source archive is available at
-`backups/before-frontend-polish.tar.gz`; its scope, checksum and safe comparison
-procedure are in [backups/README.md](../backups/README.md).
-
-To rebuild only this preview frontend:
-
-```sh
-docker compose -p bb84-upgrade-check --env-file artifacts/upgrade-ui/preview.env up --build -d --no-deps frontend
-```
-
-The browser harness from `artifacts/upgrade-ui/harness` remains reusable. Mount
-`artifacts/frontend-polish` at `/artifacts` when reproducing this checkpoint.
+The original report also names a pre-polish source archive, backup notes and a
+disposable preview configuration/browser harness under `backups/` and
+`artifacts/upgrade-ui/`. Those files are not included in this checkout; the
+preview procedure cannot be run from this copy. The report's historical source
+change summary is retained above.

@@ -13,7 +13,8 @@
 > file sharing, capability checks, the minimalist chat changes and current tests.
 
 > **Latest frontend polish:** see [FRONTEND_POLISH.md](FRONTEND_POLISH.md) for
-> the 77-test checkpoint and updated browser screenshots.
+> the historical 77-test checkpoint. Its described screenshots are not included
+> in this checkout.
 >
 > **Security lab upgrade:** see [SECURITY_LAB_UPGRADE.md](SECURITY_LAB_UPGRADE.md)
 > for the November 2026 results and updated frontend suite. The September
@@ -151,10 +152,11 @@ The final Docker build was opened in two isolated Chrome browser profiles at
 - own-message text had an opaque dark-green surface with white text; and
 - neither client emitted a console warning or uncaught exception.
 
-Five screenshots from that pass are retained under `artifacts/ui-smoke/` as
-current visual regression evidence. The browser run used separate storage
-profiles so the two participants held independent private keys. This localhost
-pass does not substitute for the required two-physical-Mac LAN acceptance test.
+The historical report says five screenshots were saved under
+`artifacts/ui-smoke/`, but that directory is not included in this checkout.
+They are therefore unavailable as current visual regression evidence here.
+The report describes a localhost browser run with separate storage profiles;
+that does not substitute for physical two-Mac LAN acceptance.
 
 The final Compose stack was also checked in its default configuration. Both
 services reported healthy, the frontend was bound only to

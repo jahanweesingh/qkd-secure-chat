@@ -70,6 +70,8 @@ error. These prevented completion after the first test participant connected.
 Brave also encountered a local DNS failure. No encryption or LAN code was changed
 to work around these test-environment limitations.
 
-Public HTTP evidence is saved locally under `artifacts/hosting/render-public-*`.
-The service is publicly reachable, but complete end-to-end acceptance is pending.
+The original note says public HTTP evidence was saved locally under
+`artifacts/hosting/render-public-*`; those artifacts are not included in this
+checkout and cannot be reviewed here. The note records that complete end-to-end
+acceptance was pending at the time of that report.
 

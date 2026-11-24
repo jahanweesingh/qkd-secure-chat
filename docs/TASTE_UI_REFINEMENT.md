@@ -36,10 +36,11 @@ imported last in `main.tsx`, owns the workspace layout. The studio is owned by
 `SecurityLabWalkthrough` owns the notebook result. Existing state and protocol
 owners remain in place.
 
-The discarded generated coffee image remains an archived design artifact at
-`artifacts/presentation/cafe-note-original.png` (1536×1024, 3142422 bytes). It is
-not rendered or served in the public app. No coffee photo, remote image request
-or remote font dependency is part of the final welcome page.
+The original design note says a generated coffee image was archived at
+`artifacts/presentation/cafe-note-original.png`; that file is not included in
+this checkout. It is not rendered or served by the application. No coffee photo,
+remote image request or remote font dependency is part of the final welcome
+page.
 
 ## Skill provenance and scope
 
@@ -95,14 +96,12 @@ An unscoped audit produced 986 findings in vendored skill templates and examples
 Those files are tooling assets, not application source; the application audit
 scope excludes them. A clean static audit does not establish browser or security
 correctness. The official Taste browser gate has **not** been claimed as passed.
-The copy-lint result covers `artifacts/presentation/taste-demo-copy.txt`, not the
-full site or its browser interactions.
-
-Final desktop screenshots are saved at
-`artifacts/presentation/14-editorial-welcome.png` and
-`artifacts/presentation/16-editorial-studio.png`. Earlier coffee-image screenshots
-are superseded. The photo was removed from the public app, and both mastheads
-retain only the QKD wordmark.
+The historical copy-lint result refers to
+`artifacts/presentation/taste-demo-copy.txt` and does not cover the full site or
+its browser interactions. The named copy-lint file and desktop screenshots are
+not included in this checkout, so they cannot be reviewed here. The historical
+report says earlier coffee-image screenshots were superseded; no screenshot
+assets are supplied in this repository copy.
 
 The mobile drawer's inert background, close/focus behavior and desktop resize
 transition have automated coverage. A new mobile visual acceptance run and
@@ -113,6 +112,11 @@ are not recorded as passing browser checks. No new physical two-Mac acceptance
 run, backend test run or packet capture is asserted here. The local skill
 installation does not fix blocked global plugin registration. Software
 simulation and ECDH-only chat limitations remain unchanged.
+
+The historical report says both mastheads retained only the QKD wordmark. In
+this checkout, `CafeWelcome` still includes the descriptive line “Private
+messaging · A BB84 security lab.” That visual discrepancy is documented here;
+the application was not changed as part of this repository-presentation update.
 
 Preview: `http://localhost:8090`. The existing LAN stack on port 8080 was not
 restarted or changed. The final assets are `index-DOe_OYqn.js` and
